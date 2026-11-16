@@ -2,7 +2,11 @@
 
 package com.family.grocery.ui
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +28,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +63,8 @@ import com.family.grocery.Category
 import com.family.grocery.Item
 import com.family.grocery.Push
 import com.family.grocery.Repo
+import com.family.grocery.widget.ListWidgetReceiver
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -143,6 +151,27 @@ private fun SetupScreen(onDone: () -> Unit) {
     }
 }
 
+private fun widgetComponent(ctx: Context) = ComponentName(ctx, ListWidgetReceiver::class.java)
+
+private fun hasWidget(ctx: Context): Boolean =
+    AppWidgetManager.getInstance(ctx).getAppWidgetIds(widgetComponent(ctx)).isNotEmpty()
+
+/** Попросить лаунчер добавить виджет на рабочий стол (появится системное окно). */
+private fun requestPinWidget(ctx: Context) {
+    val mgr = AppWidgetManager.getInstance(ctx)
+    val ok = mgr.isRequestPinAppWidgetSupported &&
+        runCatching { mgr.requestPinAppWidget(widgetComponent(ctx), null, null) }.getOrDefault(false)
+    if (ok) {
+        Toast.makeText(ctx, "Подтвердите добавление виджета", Toast.LENGTH_SHORT).show()
+    } else {
+        Toast.makeText(
+            ctx,
+            "Лаунчер не разрешил. Проверьте разрешение «Ярлыки рабочего стола» для приложения.",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+}
+
 @Composable
 private fun ListScreen(onDisconnect: () -> Unit) {
     val ctx = LocalContext.current
@@ -155,6 +184,10 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     var editItem by remember { mutableStateOf<Item?>(null) }
     var editCategory by remember { mutableStateOf<Category?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var widgetPlaced by remember { mutableStateOf(hasWidget(ctx)) }
+    LaunchedEffect(Unit) {
+        while (true) { widgetPlaced = hasWidget(ctx); delay(2_000) }
+    }
 
     fun refresh() {
         scope.launch {
@@ -171,6 +204,10 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                     IconButton(onClick = { refresh() }) { Icon(Icons.Filled.Refresh, "Обновить") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Меню") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Добавить виджет на рабочий стол") },
+                            onClick = { menu = false; requestPinWidget(ctx) },
+                        )
                         DropdownMenuItem(
                             text = { Text("Новая категория") },
                             onClick = { menu = false; showNewCategory = true },
@@ -193,13 +230,27 @@ private fun ListScreen(onDisconnect: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
         val groups = s.groups(onlyNeeded = false, includeEmpty = true)
+        Column(Modifier.fillMaxSize().padding(pad)) {
+        if (!widgetPlaced) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Виджета пока нет на рабочем столе", style = MaterialTheme.typography.titleMedium)
+                    Button(onClick = { requestPinWidget(ctx) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Добавить виджет на рабочий стол")
+                    }
+                }
+            }
+        }
         if (groups.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Добавьте первый товар кнопкой +")
             }
         } else {
             LazyColumn(
-                Modifier.fillMaxSize().padding(pad),
+                Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {
                 groups.forEach { g ->
@@ -244,6 +295,7 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                     }
                 }
             }
+        }
         }
     }
 
