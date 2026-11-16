@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Покупки</string>
+    <string name="widget_name">Список покупок</string>
+    <string name="widget_description">Товары с галочками: без галочки — нужно купить</string>
+</resources>
