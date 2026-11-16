@@ -196,6 +196,12 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     }
     LaunchedEffect(Unit) { refresh() }
 
+    var settingsOpen by remember { mutableStateOf(false) }
+    if (settingsOpen) {
+        SettingsScreen(onBack = { settingsOpen = false })
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -204,6 +210,10 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                     IconButton(onClick = { refresh() }) { Icon(Icons.Filled.Refresh, "Обновить") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Меню") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Настройки виджета") },
+                            onClick = { menu = false; settingsOpen = true },
+                        )
                         DropdownMenuItem(
                             text = { Text("Добавить виджет на рабочий стол") },
                             onClick = { menu = false; requestPinWidget(ctx) },

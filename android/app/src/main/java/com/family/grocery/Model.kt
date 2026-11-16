@@ -69,3 +69,43 @@ data class ListState(val categories: List<Category>, val items: List<Item>) {
         }
     }
 }
+
+/** Настройки внешнего вида виджета (меняются в приложении: ⋮ → Настройки виджета). */
+data class WidgetSettings(
+    val opacity: Int = 85,           // непрозрачность фона, 0..100 %
+    val theme: String = "system",    // system | light | dark
+    val textSize: Int = 16,          // sp
+    val columns: Int = 1,            // 1 или 2 колонки товаров
+    val showTitle: Boolean = true,   // заголовок «Покупки» и счётчик
+    val showCategories: Boolean = true,
+    val neededFirst: Boolean = true, // внутри категории сначала то, что нужно купить
+    val compact: Boolean = false,    // меньше отступы
+    val neededColor: String = "red", // red | orange | accent
+) {
+    fun toJson(): String = JSONObject()
+        .put("opacity", opacity).put("theme", theme).put("textSize", textSize)
+        .put("columns", columns).put("showTitle", showTitle).put("showCategories", showCategories)
+        .put("neededFirst", neededFirst).put("compact", compact).put("neededColor", neededColor)
+        .toString()
+
+    companion object {
+        fun fromJson(s: String?): WidgetSettings {
+            if (s.isNullOrBlank()) return WidgetSettings()
+            return runCatching {
+                val o = JSONObject(s)
+                val d = WidgetSettings()
+                WidgetSettings(
+                    opacity = o.optInt("opacity", d.opacity).coerceIn(0, 100),
+                    theme = o.optString("theme", d.theme),
+                    textSize = o.optInt("textSize", d.textSize).coerceIn(10, 28),
+                    columns = o.optInt("columns", d.columns).coerceIn(1, 2),
+                    showTitle = o.optBoolean("showTitle", d.showTitle),
+                    showCategories = o.optBoolean("showCategories", d.showCategories),
+                    neededFirst = o.optBoolean("neededFirst", d.neededFirst),
+                    compact = o.optBoolean("compact", d.compact),
+                    neededColor = o.optString("neededColor", d.neededColor),
+                )
+            }.getOrDefault(WidgetSettings())
+        }
+    }
+}

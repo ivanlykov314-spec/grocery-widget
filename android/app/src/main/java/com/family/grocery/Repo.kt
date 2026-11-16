@@ -30,6 +30,7 @@ object Repo {
     val state = MutableStateFlow(ListState.EMPTY)
     val onlyNeeded = MutableStateFlow(false)
     val lastError = MutableStateFlow<String?>(null)
+    val widgetSettings = MutableStateFlow(WidgetSettings())
 
     @Synchronized
     fun init(context: Context) {
@@ -44,6 +45,7 @@ object Repo {
             o.keys().forEach { k -> pending[k.toInt()] = o.getBoolean(k) }
         }
         onlyNeeded.value = prefs.getBoolean("onlyNeeded", false)
+        widgetSettings.value = WidgetSettings.fromJson(prefs.getString("widgetSettings", null))
         initialized = true
         publish()
     }
@@ -66,6 +68,12 @@ object Repo {
         prefs.edit().putBoolean("onlyNeeded", value).apply()
     }
 
+    suspend fun saveWidgetSettings(context: Context, s: WidgetSettings) {
+        widgetSettings.value = s
+        prefs.edit().putString("widgetSettings", s.toJson()).apply()
+        updateWidgets(context)
+    }
+
     private fun api() = Api(prefs.getString("url", "")!!, prefs.getString("key", "")!!)
 
     /** Первое подключение к серверу: проверяем ключ и забираем настройки push. */
@@ -86,7 +94,8 @@ object Repo {
 
     fun disconnect() {
         val only = onlyNeeded.value
-        prefs.edit().clear().putBoolean("onlyNeeded", only).apply()
+        val ws = widgetSettings.value.toJson()
+        prefs.edit().clear().putBoolean("onlyNeeded", only).putString("widgetSettings", ws).apply()
         synchronized(this) { pending.clear() }
         cacheFile.delete()
         serverState = ListState.EMPTY
