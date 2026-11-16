@@ -57,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.family.grocery.Category
@@ -122,12 +123,17 @@ private fun SetupScreen(onDone: () -> Unit) {
             label = { Text("Адрес сервера") },
             placeholder = { Text("grocery-xxxx.up.railway.app") },
             singleLine = true, modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
         )
         OutlinedTextField(
             value = key, onValueChange = { key = it },
             label = { Text("Семейный ключ") },
             singleLine = true, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+                capitalization = KeyboardCapitalization.None,
+            ),
         )
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(

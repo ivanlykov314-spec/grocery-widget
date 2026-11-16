@@ -78,8 +78,12 @@ object Repo {
 
     /** Первое подключение к серверу: проверяем ключ и забираем настройки push. */
     suspend fun connect(context: Context, rawUrl: String, key: String) {
-        var url = rawUrl.trim().trimEnd('/')
-        if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://$url"
+        // Убираем пробелы и любую схему: Railway работает только по https,
+        // а Android запрещает незашифрованный http.
+        val host = rawUrl.replace(Regex("\\s"), "")
+            .replace(Regex("^(?i)https?:/*"), "")
+            .trimEnd('/')
+        val url = "https://$host"
         val cfg = withContext(Dispatchers.IO) { Api(url, key.trim()).request("GET", "/api/config") }
         val firebase = if (cfg.isNull("firebase")) null else cfg.getJSONObject("firebase").toString()
         prefs.edit()
