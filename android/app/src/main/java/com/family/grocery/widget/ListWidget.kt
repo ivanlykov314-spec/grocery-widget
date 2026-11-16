@@ -13,6 +13,7 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
@@ -22,6 +23,7 @@ import androidx.glance.appwidget.CheckBox
 import androidx.glance.appwidget.CheckboxDefaults
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.ToggleableStateKey
 import androidx.glance.appwidget.action.actionRunCallback
@@ -46,18 +48,23 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.family.grocery.CategoryTab
 import com.family.grocery.Group
 import com.family.grocery.Item
 import com.family.grocery.ListState
 import com.family.grocery.R
 import com.family.grocery.Repo
 import com.family.grocery.Sync
+import com.family.grocery.TAB_ALL
 import com.family.grocery.WidgetSettings
 import com.family.grocery.ui.AddItemActivity
 import com.family.grocery.ui.MainActivity
 import kotlinx.coroutines.withTimeoutOrNull
 
 class ListWidget : GlanceAppWidget() {
+    // Exact: знаем реальную ширину виджета, чтобы переносить вкладки по строкам.
+    override val sizeMode = SizeMode.Exact
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         Repo.init(context)
         provideContent {
@@ -65,7 +72,8 @@ class ListWidget : GlanceAppWidget() {
             val only by Repo.onlyNeeded.collectAsState()
             val error by Repo.lastError.collectAsState()
             val settings by Repo.widgetSettings.collectAsState()
-            WidgetBody(s, only, Repo.isConfigured, error, palette(context, settings), settings)
+            val tab by Repo.selectedTab.collectAsState()
+            WidgetBody(s, only, Repo.isConfigured, error, palette(context, settings), settings, s.validTab(tab))
         }
     }
 }
@@ -81,6 +89,7 @@ class ListWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 private val ItemIdKey = ActionParameters.Key<Int>("itemId")
+private val TabKey = ActionParameters.Key<Int>("tab")
 
 /** Цвета виджета с учётом темы и прозрачности из настроек. */
 private class Palette(
@@ -91,6 +100,7 @@ private class Palette(
     val needed: ColorProvider,
     val chipBg: ColorProvider,
     val chipText: ColorProvider,
+    val onAccent: ColorProvider,
 )
 
 private fun palette(ctx: Context, ws: WidgetSettings): Palette {
@@ -122,6 +132,7 @@ private fun palette(ctx: Context, ws: WidgetSettings): Palette {
             sys(android.R.color.system_accent2_700, 0xFF3F4A3F),
         ),
         chipText = cp(Color(0xFF1B1B1F), Color(0xFFE6E1E5)),
+        onAccent = cp(Color.White, Color(0xFF1B1B1F)),
     )
 }
 
@@ -133,6 +144,7 @@ private fun WidgetBody(
     error: String?,
     p: Palette,
     ws: WidgetSettings,
+    tab: Int,
 ) {
     val pad = if (ws.compact) 6.dp else 10.dp
     Column(
@@ -158,7 +170,8 @@ private fun WidgetBody(
                     .clickable(actionStartActivity<MainActivity>()),
             )
         } else {
-            val groups = visibleGroups(s, onlyNeeded, ws)
+            if (ws.tabs) TabsBar(s.tabs(), tab, p, ws, pad.value)
+            val groups = visibleGroups(s, onlyNeeded, ws, if (ws.tabs) tab else TAB_ALL)
             if (groups.isEmpty()) {
                 Text(
                     text = if (onlyNeeded) "Всё есть дома 👍" else "Список пуст — нажмите +",
@@ -168,7 +181,7 @@ private fun WidgetBody(
             } else {
                 LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                     groups.forEach { g ->
-                        if (ws.showCategories) {
+                        if (ws.showCategories && (!ws.tabs || tab == TAB_ALL)) {
                             item(itemId = 1_000_000_000L + (g.category?.id ?: 0)) {
                                 CategoryHeader(g.category?.name ?: "Без категории", p, ws)
                             }
@@ -192,13 +205,62 @@ private fun WidgetBody(
     }
 }
 
-private fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings): List<Group> {
+private fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings, tab: Int): List<Group> {
     fun sort(list: List<Item>) = if (ws.neededFirst) list.sortedBy { it.inStock } else list
+    if (tab != TAB_ALL) {
+        val list = s.itemsForTab(tab).filter { !onlyNeeded || !it.inStock }.sortedBy { it.name.lowercase() }
+        return if (list.isEmpty()) emptyList() else listOf(Group(null, sort(list)))
+    }
     return if (ws.showCategories) {
         s.groups(onlyNeeded = onlyNeeded, includeEmpty = false).map { it.copy(items = sort(it.items)) }
     } else {
         val all = s.items.filter { !onlyNeeded || !it.inStock }.sortedBy { it.name.lowercase() }
         if (all.isEmpty()) emptyList() else listOf(Group(null, sort(all)))
+    }
+}
+
+/** Вкладки категорий. Glance не умеет прокручивать вбок, поэтому переносим их по строкам. */
+@Composable
+private fun TabsBar(tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings, padDp: Float) {
+    val fontSp = if (ws.compact) 12 else 13
+    val available = LocalSize.current.width.value - padDp * 2 - 4f
+    fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
+    val rows = mutableListOf<MutableList<CategoryTab>>()
+    var used = 0f
+    for (t in tabs) {
+        // Примерная ширина: ~0.6 ширины шрифта на символ + отступы чипа и промежуток.
+        val w = label(t).length * fontSp * 0.6f + 18f + 6f
+        if (rows.isEmpty() || used + w > available) {
+            rows += mutableListOf(t)
+            used = w
+        } else {
+            rows.last() += t
+            used += w
+        }
+    }
+    Column(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 2.dp)) {
+        rows.forEach { row ->
+            Row(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                row.forEach { t ->
+                    val isSel = t.id == selected
+                    Text(
+                        text = label(t),
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = if (isSel) p.onAccent else p.chipText,
+                            fontSize = fontSp.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                        ),
+                        modifier = GlanceModifier
+                            .background(if (isSel) p.accent else p.chipBg)
+                            .cornerRadius(12.dp)
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                            .clickable(actionRunCallback<SelectTabAction>(actionParametersOf(TabKey to t.id))),
+                    )
+                    Spacer(GlanceModifier.width(6.dp))
+                }
+            }
+        }
     }
 }
 
@@ -274,6 +336,15 @@ class ToggleAction : ActionCallback {
         val newValue = parameters[ToggleableStateKey]
             ?: !(Repo.state.value.items.firstOrNull { it.id == id }?.inStock ?: return)
         Repo.setInStock(context, id, newValue)
+    }
+}
+
+class SelectTabAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        Repo.init(context)
+        val tab = parameters[TabKey] ?: return
+        Repo.setSelectedTab(tab)
+        ListWidget().updateAll(context)
     }
 }
 

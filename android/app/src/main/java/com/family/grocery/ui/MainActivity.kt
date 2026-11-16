@@ -40,6 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -61,6 +63,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.family.grocery.Category
+import com.family.grocery.Group
+import com.family.grocery.TAB_ALL
 import com.family.grocery.Item
 import com.family.grocery.Push
 import com.family.grocery.Repo
@@ -202,6 +206,7 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     }
     LaunchedEffect(Unit) { refresh() }
 
+    val currentTab by Repo.selectedTab.collectAsState()
     var settingsOpen by remember { mutableStateOf(false) }
     if (settingsOpen) {
         SettingsScreen(onBack = { settingsOpen = false })
@@ -245,8 +250,29 @@ private fun ListScreen(onDisconnect: () -> Unit) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
-        val groups = s.groups(onlyNeeded = false, includeEmpty = true)
+        val tabs = s.tabs()
+        val selectedTab = s.validTab(currentTab)
+        val groups = if (selectedTab == TAB_ALL) {
+            s.groups(onlyNeeded = false, includeEmpty = true)
+        } else {
+            val cat = s.categories.firstOrNull { it.id == selectedTab }
+            listOf(Group(cat, s.itemsForTab(selectedTab)))
+        }
         Column(Modifier.fillMaxSize().padding(pad)) {
+        if (tabs.size > 1) {
+            ScrollableTabRow(
+                selectedTabIndex = tabs.indexOfFirst { it.id == selectedTab }.coerceAtLeast(0),
+                edgePadding = 8.dp,
+            ) {
+                tabs.forEach { t ->
+                    Tab(
+                        selected = t.id == selectedTab,
+                        onClick = { scope.launch { Repo.setSelectedTab(t.id); Repo.updateWidgets(ctx) } },
+                        text = { Text(if (t.needed > 0) "${t.name} (${t.needed})" else t.name) },
+                    )
+                }
+            }
+        }
         if (!widgetPlaced) {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),

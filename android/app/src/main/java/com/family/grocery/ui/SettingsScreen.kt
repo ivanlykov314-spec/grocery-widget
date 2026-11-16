@@ -130,7 +130,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             HorizontalDivider()
             Section("Список")
 
-            SwitchRow("Показывать категории", "Если выключить — один общий список по алфавиту", ws.showCategories) {
+            SwitchRow("Категории вкладками", "Вкладки «Все», «Овощи», «Фрукты»… вверху виджета", ws.tabs) {
+                save(ws.copy(tabs = it))
+            }
+            SwitchRow("Показывать категории", "На вкладке «Все»: если выключить — один общий список по алфавиту", ws.showCategories) {
                 save(ws.copy(showCategories = it))
             }
             SwitchRow("Сначала то, что нужно купить", "Товары без галочки поднимаются наверх", ws.neededFirst) {

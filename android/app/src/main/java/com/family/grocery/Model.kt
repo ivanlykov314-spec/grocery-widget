@@ -10,6 +10,12 @@ data class Item(val id: Int, val categoryId: Int?, val name: String, val inStock
 
 data class Group(val category: Category?, val items: List<Item>)
 
+/** Вкладка категории: id = категория, TAB_ALL = «Все», TAB_NONE = «Без категории». */
+data class CategoryTab(val id: Int, val name: String, val needed: Int)
+
+const val TAB_ALL = -2
+const val TAB_NONE = -1
+
 data class ListState(val categories: List<Category>, val items: List<Item>) {
 
     val neededCount: Int get() = items.count { !it.inStock }
@@ -28,6 +34,29 @@ data class ListState(val categories: List<Category>, val items: List<Item>) {
         if (orphans.isNotEmpty()) result += Group(null, orphans)
         return result
     }
+
+    fun tabs(): List<CategoryTab> {
+        val knownIds = categories.map { it.id }.toSet()
+        val result = mutableListOf(CategoryTab(TAB_ALL, "Все", neededCount))
+        categories.forEach { c ->
+            result += CategoryTab(c.id, c.name, items.count { it.categoryId == c.id && !it.inStock })
+        }
+        val orphans = items.filter { it.categoryId == null || it.categoryId !in knownIds }
+        if (orphans.isNotEmpty()) result += CategoryTab(TAB_NONE, "Без категории", orphans.count { !it.inStock })
+        return result
+    }
+
+    fun itemsForTab(tab: Int): List<Item> {
+        val knownIds = categories.map { it.id }.toSet()
+        return when (tab) {
+            TAB_ALL -> items
+            TAB_NONE -> items.filter { it.categoryId == null || it.categoryId !in knownIds }
+            else -> items.filter { it.categoryId == tab }
+        }
+    }
+
+    /** Выбранная вкладка, если она ещё существует; иначе «Все». */
+    fun validTab(tab: Int): Int = if (tabs().any { it.id == tab }) tab else TAB_ALL
 
     fun toJson(): JSONObject {
         val cats = JSONArray()
@@ -81,11 +110,12 @@ data class WidgetSettings(
     val neededFirst: Boolean = true, // внутри категории сначала то, что нужно купить
     val compact: Boolean = false,    // меньше отступы
     val neededColor: String = "red", // red | orange | accent
+    val tabs: Boolean = true,        // категории вкладками
 ) {
     fun toJson(): String = JSONObject()
         .put("opacity", opacity).put("theme", theme).put("textSize", textSize)
         .put("columns", columns).put("showTitle", showTitle).put("showCategories", showCategories)
-        .put("neededFirst", neededFirst).put("compact", compact).put("neededColor", neededColor)
+        .put("neededFirst", neededFirst).put("compact", compact).put("neededColor", neededColor).put("tabs", tabs)
         .toString()
 
     companion object {
@@ -104,6 +134,7 @@ data class WidgetSettings(
                     neededFirst = o.optBoolean("neededFirst", d.neededFirst),
                     compact = o.optBoolean("compact", d.compact),
                     neededColor = o.optString("neededColor", d.neededColor),
+                    tabs = o.optBoolean("tabs", d.tabs),
                 )
             }.getOrDefault(WidgetSettings())
         }

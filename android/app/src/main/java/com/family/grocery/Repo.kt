@@ -31,6 +31,7 @@ object Repo {
     val onlyNeeded = MutableStateFlow(false)
     val lastError = MutableStateFlow<String?>(null)
     val widgetSettings = MutableStateFlow(WidgetSettings())
+    val selectedTab = MutableStateFlow(TAB_ALL)
 
     @Synchronized
     fun init(context: Context) {
@@ -46,6 +47,7 @@ object Repo {
         }
         onlyNeeded.value = prefs.getBoolean("onlyNeeded", false)
         widgetSettings.value = WidgetSettings.fromJson(prefs.getString("widgetSettings", null))
+        selectedTab.value = prefs.getInt("selectedTab", TAB_ALL)
         initialized = true
         publish()
     }
@@ -66,6 +68,11 @@ object Repo {
     fun setOnlyNeeded(value: Boolean) {
         onlyNeeded.value = value
         prefs.edit().putBoolean("onlyNeeded", value).apply()
+    }
+
+    fun setSelectedTab(tab: Int) {
+        selectedTab.value = tab
+        prefs.edit().putInt("selectedTab", tab).apply()
     }
 
     suspend fun saveWidgetSettings(context: Context, s: WidgetSettings) {

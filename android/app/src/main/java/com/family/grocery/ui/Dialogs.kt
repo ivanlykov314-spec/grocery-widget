@@ -105,7 +105,10 @@ fun AddItemDialog(onDismiss: () -> Unit) {
 
     var name by remember { mutableStateOf("") }
     var catId by remember {
-        mutableStateOf(Repo.lastCategoryId?.takeIf { id -> state.categories.any { it.id == id } })
+        // Если открыта вкладка категории — новый товар сразу попадёт в неё.
+        val tab = Repo.selectedTab.value
+        val fromTab = tab.takeIf { id -> id >= 0 && state.categories.any { it.id == id } }
+        mutableStateOf(fromTab ?: Repo.lastCategoryId?.takeIf { id -> state.categories.any { it.id == id } })
     }
     var newCatMode by remember { mutableStateOf(false) }
     var newCatName by remember { mutableStateOf("") }
