@@ -46,6 +46,7 @@ private const val ACTION_TAB = "com.family.grocery.TAB"
 private const val ACTION_FILTER = "com.family.grocery.FILTER"
 private const val ACTION_REFRESH = "com.family.grocery.REFRESH"
 private const val ACTION_PAGE = "com.family.grocery.PAGE"
+private const val ACTION_NOTE = "com.family.grocery.NOTE"
 private const val EXTRA_PAGE = "page"
 private const val EXTRA_ITEM = "itemId"
 private const val EXTRA_TAB = "tab"
@@ -198,10 +199,7 @@ object WidgetRenderer {
         // Кнопка «Купить» — только когда есть что купить; нажата = показываем только нужное.
         if (configured && s.neededCount > 0) {
             rv.setViewVisibility(R.id.chip, View.VISIBLE)
-            rv.setTextViewText(R.id.chip_text, if (only) bold("Купить") else "Купить")
-            rv.setTextColor(R.id.chip_text, if (only) p.onAccent else p.chipText)
-            rv.setImageViewResource(R.id.chip_bg, if (only) R.drawable.chip_bg else R.drawable.chip_outline)
-            rv.setInt(R.id.chip_bg, "setColorFilter", if (only) p.accent else p.muted)
+            showChip(rv, intArrayOf(R.id.chip_o, R.id.chip_l, R.id.chip_d), if (only) bold("Купить") else "Купить", only, p)
             rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
         } else {
             rv.setViewVisibility(R.id.chip, View.GONE)
@@ -229,7 +227,7 @@ object WidgetRenderer {
             val widthDp = mgr.getAppWidgetOptions(appWidgetId)
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
             // ширина строки чипов: минус отступы виджета и две стрелки по 28dp
-            fillTabChips(ctx, rv, s.tabs(), tab, p, ws, (widthDp - (if (ws.compact) 12 else 20) - 56 - 4).toFloat())
+            fillTabChips(ctx, rv, s.tabs(), tab, p, ws, (widthDp - (if (ws.compact) 12 else 20) - 48 - 2).toFloat())
             rv.setViewVisibility(R.id.tabs, View.VISIBLE)
         } else {
             rv.setViewVisibility(R.id.tabs, View.GONE)
@@ -253,7 +251,8 @@ object WidgetRenderer {
             rv.setRemoteAdapter(R.id.list, svc)
             rv.setEmptyView(R.id.list, R.id.empty)
             val template = PendingIntent.getBroadcast(
-                ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
+                // Без action: его подставляет fill-in строки (галочка — TOGGLE, название — NOTE).
+                ctx, 31, Intent(ctx, ListWidgetReceiver::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
             )
             rv.setPendingIntentTemplate(R.id.list, template)
@@ -291,18 +290,44 @@ object WidgetRenderer {
         rv.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
     }
 
+    /**
+     * Чип = три TextView с фоном из макета: рамка (o), заливка светлой (l) и тёмной (d) темы.
+     * Показываем один. (Фон-картинка под текстом на некоторых лаунчерах не рисуется.)
+     */
+    private fun showChip(rv: RemoteViews, variants: IntArray, text: CharSequence, selected: Boolean, p: Palette) {
+        val visible = when {
+            !selected -> 0
+            p.night -> 2
+            else -> 1
+        }
+        variants.forEachIndexed { i, id ->
+            if (i == visible) {
+                rv.setViewVisibility(id, View.VISIBLE)
+                rv.setTextViewText(id, text)
+                rv.setTextColor(id, if (selected) p.onAccent else p.chipText)
+            } else {
+                rv.setViewVisibility(id, View.GONE)
+            }
+        }
+    }
+
     /** Чипы-вкладки в одну строку, по страницам: ‹ › листают страницы, нажатие на чип выбирает категорию. */
     private fun fillTabChips(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int,
         p: Palette, ws: WidgetSettings, available: Float,
     ) {
-        val fontSp = if (ws.compact) 12 else 13
+        val fontSp = if (ws.compact) 12f else 13f
         fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
-        // Разбивка на страницы: ~0.6 кегля на символ + внутренние отступы + промежуток.
+        // Точная ширина текста (жирным — с запасом) + отступы чипа 8+8 dp + промежуток 4 dp.
+        val dm = ctx.resources.displayMetrics
+        val paint = android.graphics.Paint().apply {
+            textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, fontSp, dm)
+            typeface = Typeface.DEFAULT_BOLD
+        }
         val pages = mutableListOf<MutableList<Pair<Int, CategoryTab>>>()
         var used = 0f
         tabs.forEachIndexed { index, t ->
-            val w = label(t).length * fontSp * 0.6f + 18f + 5f
+            val w = paint.measureText(label(t)) / dm.density + 16f + 4f + 2f
             if (pages.isEmpty() || used + w > available || pages.last().size >= TAB_CHIP_IDS.size) {
                 pages += mutableListOf<Pair<Int, CategoryTab>>()
                 used = 0f
@@ -322,13 +347,9 @@ object WidgetRenderer {
             }
             val (index, t) = entry
             val isSel = t.id == selected
-            val text = TAB_CHIP_TEXT_IDS[c]
             rv.setViewVisibility(slot, View.VISIBLE)
-            rv.setTextViewText(text, if (isSel) bold(label(t)) else label(t))
-            rv.setTextColor(text, if (isSel) p.onAccent else p.chipText)
-            rv.setTextViewTextSize(text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
-            rv.setImageViewResource(TAB_CHIP_BG_IDS[c], if (isSel) R.drawable.chip_bg else R.drawable.chip_outline)
-            rv.setInt(TAB_CHIP_BG_IDS[c], "setColorFilter", if (isSel) p.accent else p.muted)
+            showChip(rv, TAB_CHIP_VARIANTS[c], if (isSel) bold(label(t)) else label(t), isSel, p)
+            TAB_CHIP_VARIANTS[c].forEach { rv.setTextViewTextSize(it, TypedValue.COMPLEX_UNIT_SP, fontSp) }
             rv.setOnClickPendingIntent(slot, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
         }
         // Стрелки: невидимые (а не скрытые), чтобы строка не прыгала.
@@ -384,6 +405,19 @@ class ListWidgetReceiver : AppWidgetProvider() {
             ACTION_TAB -> {
                 Repo.setSelectedTab(intent.getIntExtra(EXTRA_TAB, TAB_ALL), keepPage = true)
                 WidgetRenderer.renderAll(ctx)
+            }
+            ACTION_NOTE -> {
+                val id = intent.getIntExtra(EXTRA_ITEM, -1)
+                if (id < 0) return
+                try {
+                    ctx.startActivity(
+                        Intent(ctx, com.family.grocery.ui.NoteActivity::class.java)
+                            .putExtra(com.family.grocery.ui.NoteActivity.EXTRA_ITEM_ID, id)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                    )
+                } catch (e: Exception) {
+                    Diag.record(ctx, "widget note", e)
+                }
             }
             ACTION_PAGE -> {
                 Repo.tabPage = intent.getIntExtra(EXTRA_PAGE, 0).coerceAtLeast(0)
@@ -486,7 +520,9 @@ internal object WidgetRows {
         val pad = if (ws.compact) 3 else 6
         val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, pad.toFloat(), ctx.resources.displayMetrics).toInt()
         rv.setViewPadding(cell, px / 2, px, px, px)
-        rv.setOnClickFillInIntent(cell, Intent().putExtra(EXTRA_ITEM, item.id))
+        // Галочка — поставить/снять; название — окно с комментарием.
+        rv.setOnClickFillInIntent(box, Intent().setAction(ACTION_TOGGLE).putExtra(EXTRA_ITEM, item.id))
+        rv.setOnClickFillInIntent(name, Intent().setAction(ACTION_NOTE).putExtra(EXTRA_ITEM, item.id))
     }
 }
 

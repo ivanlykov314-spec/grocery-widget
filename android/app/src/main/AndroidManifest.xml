@@ -30,6 +30,15 @@
             android:theme="@style/Theme.Grocery.Transparent"
             android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
 
+        <!-- Комментарий к товару (нажатие на название в виджете) -->
+        <activity
+            android:name=".ui.NoteActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Grocery.Transparent"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
+
         <!-- Выбор категории из виджета (нажатие на название вкладки) -->
         <activity
             android:name=".ui.PickTabActivity"

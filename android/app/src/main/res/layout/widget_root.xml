@@ -37,29 +37,48 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <!-- Фон чипа — отдельная картинка (setBackgroundResource лаунчеры не применяют) -->
+            <!-- Кнопка «Купить»: три варианта оформления (рамка / заливка светлая / тёмная),
+                 показывается один. Фон задан в макете — так он надёжно рисуется на любом лаунчере. -->
             <FrameLayout
                 android:id="@+id/chip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content">
-
-                <ImageView
-                    android:id="@+id/chip_bg"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="fitXY"
-                    android:src="@drawable/chip_bg" />
-
                 <TextView
-                    android:id="@+id/chip_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="10dp"
-                    android:paddingTop="5dp"
-                    android:paddingEnd="10dp"
-                    android:paddingBottom="5dp"
-                    android:singleLine="true"
-                    android:textSize="13sp" />
+                        android:id="@+id/chip_o"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                <TextView
+                        android:id="@+id/chip_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                <TextView
+                        android:id="@+id/chip_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
             </FrameLayout>
 
             <ImageView
@@ -111,11 +130,10 @@
 
             <ImageView
                 android:id="@+id/page_prev"
-                android:layout_width="28dp"
+                android:layout_width="24dp"
                 android:layout_height="32dp"
                 android:contentDescription="Предыдущие категории"
-                android:paddingStart="2dp"
-                android:paddingEnd="6dp"
+                android:paddingEnd="4dp"
                 android:src="@drawable/ic_chevron_left" />
 
             <LinearLayout
@@ -126,198 +144,529 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
                 <FrameLayout
-                    android:id="@+id/tc_0_0"
+                    android:id="@+id/tc_0"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_0"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_0"
+                        android:id="@+id/tc_0_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_0_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_0_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_1"
+                    android:id="@+id/tc_1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_1"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_1"
+                        android:id="@+id/tc_1_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_1_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_1_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_2"
+                    android:id="@+id/tc_2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_2"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_2"
+                        android:id="@+id/tc_2_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_2_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_2_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_3"
+                    android:id="@+id/tc_3"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_3"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_3"
+                        android:id="@+id/tc_3_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_3_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_3_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_4"
+                    android:id="@+id/tc_4"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_4"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_4"
+                        android:id="@+id/tc_4_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_4_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_4_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_5"
+                    android:id="@+id/tc_5"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_5"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_5"
+                        android:id="@+id/tc_5_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_5_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_5_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_6"
+                    android:id="@+id/tc_6"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_6"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_6"
+                        android:id="@+id/tc_6_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_6_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_6_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
                 <FrameLayout
-                    android:id="@+id/tc_0_7"
+                    android:id="@+id/tc_7"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="5dp"
+                    android:layout_marginEnd="4dp"
                     android:visibility="gone">
-                    <ImageView
-                        android:id="@+id/tcb_0_7"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="fitXY"
-                        android:src="@drawable/chip_outline" />
                     <TextView
-                        android:id="@+id/tct_0_7"
+                        android:id="@+id/tc_7_o"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingStart="9dp"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
                         android:paddingTop="4dp"
-                        android:paddingEnd="9dp"
+                        android:paddingEnd="8dp"
                         android:paddingBottom="4dp"
                         android:singleLine="true"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_7_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_7_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </FrameLayout>
+                <FrameLayout
+                    android:id="@+id/tc_8"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/tc_8_o"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_8_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_8_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </FrameLayout>
+                <FrameLayout
+                    android:id="@+id/tc_9"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/tc_9_o"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_9_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_9_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </FrameLayout>
+                <FrameLayout
+                    android:id="@+id/tc_10"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/tc_10_o"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_10_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_10_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                </FrameLayout>
+                <FrameLayout
+                    android:id="@+id/tc_11"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/tc_11_o"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_outline"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="visible" />
+                    <TextView
+                        android:id="@+id/tc_11_l"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_light"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tc_11_d"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_fill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:singleLine="true"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
 
             <ImageView
                 android:id="@+id/page_next"
-                android:layout_width="28dp"
+                android:layout_width="24dp"
                 android:layout_height="32dp"
                 android:contentDescription="Следующие категории"
-                android:paddingStart="6dp"
-                android:paddingEnd="2dp"
+                android:paddingStart="4dp"
                 android:src="@drawable/ic_chevron_right" />
         </LinearLayout>
 
