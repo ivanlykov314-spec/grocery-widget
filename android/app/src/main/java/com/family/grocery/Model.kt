@@ -111,12 +111,12 @@ data class WidgetSettings(
     val compact: Boolean = false,    // меньше отступы
     val neededColor: String = "red", // red | orange | accent
     val tabs: Boolean = true,        // категории вкладками
-    val tabStyle: String = "arrows", // arrows (‹ Категория ›) | chips (все вкладки сразу)
+    val tabStyle: String = "chips",  // chips (все вкладки сразу, как в старой версии) | arrows (‹ Категория ›)
 ) {
     fun toJson(): String = JSONObject()
         .put("opacity", opacity).put("theme", theme).put("textSize", textSize)
         .put("columns", columns).put("showTitle", showTitle).put("showCategories", showCategories)
-        .put("sortNeeded", neededFirst).put("compact", compact).put("neededColor", neededColor).put("tabs", tabs).put("tabStyle", tabStyle)
+        .put("sortNeeded", neededFirst).put("compact", compact).put("neededColor", neededColor).put("tabs", tabs).put("tabsView", tabStyle)
         .toString()
 
     companion object {
@@ -136,7 +136,7 @@ data class WidgetSettings(
                     compact = o.optBoolean("compact", d.compact),
                     neededColor = o.optString("neededColor", d.neededColor),
                     tabs = o.optBoolean("tabs", d.tabs),
-                    tabStyle = o.optString("tabStyle", d.tabStyle),
+                    tabStyle = o.optString("tabsView", d.tabStyle),
                 )
             }.getOrDefault(WidgetSettings())
         }

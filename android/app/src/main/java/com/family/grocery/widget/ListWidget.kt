@@ -136,12 +136,11 @@ object WidgetRenderer {
     /**
      * Полное обновление пересоздаёт список (он на миг мелькает «загрузкой»), поэтому делаем его
      * один раз, а дальше — частичное: только заголовок, вкладки и цвета; список обновляет notify.
-     * Вкладки-чипы добавляются через addView — для них всегда полное обновление.
+     * Поэтому в макете нельзя использовать addView — только заготовленные элементы.
      */
     fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int, full: Boolean = true) {
         try {
-            val ws = Repo.widgetSettings.value
-            val needFull = full || (ws.tabs && ws.tabStyle == "chips")
+            val needFull = full
             val rv = build(ctx, mgr, appWidgetId, withList = needFull)
             if (needFull) {
                 mgr.updateAppWidget(appWidgetId, rv)
@@ -194,7 +193,7 @@ object WidgetRenderer {
 
         rv.setTextViewText(R.id.chip_text, if (only) "Купить: ${s.neededCount}" else "Все · купить ${s.neededCount}")
         rv.setTextColor(R.id.chip_text, p.chipText)
-        rv.setImageViewResource(R.id.chip_bg, chipBg(p, false))
+        rv.setInt(R.id.chip_bg, "setColorFilter", p.chipBg)
         rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
 
         rv.setInt(R.id.btn_refresh, "setColorFilter", p.text)
@@ -212,19 +211,18 @@ object WidgetRenderer {
             rv.setViewVisibility(R.id.error, View.GONE)
         }
 
-        // Вкладки категорий
+        // Вкладки категорий: «все сразу» (чипы, как в старой версии) или ‹ одна строка ›
         val showTabs = configured && ws.tabs && s.tabs().isNotEmpty()
-        if (showTabs && ws.tabStyle == "chips") {
-            rv.removeAllViews(R.id.tabs)
-            val opts: Bundle = mgr.getAppWidgetOptions(appWidgetId)
-            val widthDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
-            val available = widthDp - (if (ws.compact) 12 else 20) - 4
-            addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
+        val chips = ws.tabStyle == "chips"
+        if (showTabs && chips) {
+            val widthDp = mgr.getAppWidgetOptions(appWidgetId)
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
+            fillTabChips(ctx, rv, s.tabs(), tab, p, ws, (widthDp - (if (ws.compact) 12 else 20) - 4).toFloat())
             rv.setViewVisibility(R.id.tabs, View.VISIBLE)
         } else {
             rv.setViewVisibility(R.id.tabs, View.GONE)
         }
-        if (showTabs && ws.tabStyle != "chips") {
+        if (showTabs && !chips) {
             fillTabSwitcher(ctx, rv, s.tabs(), tab, p, ws)
             rv.setViewVisibility(R.id.tab_switch, View.VISIBLE)
         } else {
@@ -261,15 +259,6 @@ object WidgetRenderer {
         return rv
     }
 
-    private fun chipBg(p: Palette, selected: Boolean): Int = when {
-        selected && p.night -> R.drawable.chip_sel_dark
-        selected -> R.drawable.chip_sel_light
-        p.night -> R.drawable.chip_dark
-        else -> R.drawable.chip_light
-    }
-
-    private fun selText(p: Palette): Int = if (p.night) 0xFF1B1B1F.toInt() else 0xFFFFFFFF.toInt()
-
     /** Компактные вкладки: ‹ Категория ›, нажатие на название — список всех категорий. Элементы прямо в widget_root. */
     private fun fillTabSwitcher(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings,
@@ -280,9 +269,9 @@ object WidgetRenderer {
         val next = tabs[(idx + 1) % tabs.size]
         val label = if (cur.needed > 0) "${cur.name} · купить ${cur.needed}" else cur.name
         rv.setTextViewText(R.id.tab_current, label)
-        rv.setTextColor(R.id.tab_current, selText(p))
+        rv.setTextColor(R.id.tab_current, p.onAccent)
         rv.setTextViewTextSize(R.id.tab_current, TypedValue.COMPLEX_UNIT_SP, (if (ws.compact) 14 else 15).toFloat())
-        rv.setImageViewResource(R.id.tab_current_bg, chipBg(p, true))
+        rv.setInt(R.id.tab_current_bg, "setColorFilter", p.accent)
         rv.setInt(R.id.tab_prev, "setColorFilter", p.text)
         rv.setInt(R.id.tab_next, "setColorFilter", p.text)
         rv.setOnClickPendingIntent(R.id.tab_prev, broadcast(ctx, ACTION_TAB, 40) { putExtra(EXTRA_TAB, prev.id) })
@@ -290,37 +279,54 @@ object WidgetRenderer {
         rv.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
     }
 
-    private fun addTabs(
+    /** Чипы-вкладки по строкам в заготовленных местах макета; лишние места скрываются. */
+    private fun fillTabChips(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int,
         p: Palette, ws: WidgetSettings, available: Float,
     ) {
         val fontSp = if (ws.compact) 12 else 13
         fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
-        var row: RemoteViews? = null
+        // Раскладка по строкам: ~0.6 кегля на символ + внутренние отступы + промежуток.
+        val rows = mutableListOf<MutableList<Pair<Int, CategoryTab>>>()
         var used = 0f
         tabs.forEachIndexed { index, t ->
-            // Примерная ширина чипа: ~0.6 кегля на символ + внутренние отступы + промежуток.
             val w = label(t).length * fontSp * 0.6f + 18f + 6f
-            if (row == null || used + w > available) {
-                row?.let { rv.addView(R.id.tabs, it) }
-                row = RemoteViews(ctx.packageName, R.layout.widget_tab_row)
+            if (rows.isEmpty() || used + w > available || rows.last().size >= TAB_CHIP_IDS[0].size) {
+                rows += mutableListOf<Pair<Int, CategoryTab>>()
                 used = 0f
             }
             used += w
-            val isSel = t.id == selected
-            val chip = RemoteViews(ctx.packageName, R.layout.widget_tab)
-            chip.setTextViewText(R.id.tab_text, if (isSel) bold(label(t)) else label(t))
-            chip.setTextColor(R.id.tab_text, if (isSel) selText(p) else p.chipText)
-            chip.setTextViewTextSize(R.id.tab_text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
-            chip.setImageViewResource(R.id.tab_bg, chipBg(p, isSel))
-            chip.setOnClickPendingIntent(R.id.tab_root, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
-            row!!.addView(R.id.tab_row, chip)
+            rows.last() += index to t
         }
-        row?.let { rv.addView(R.id.tabs, it) }
+        for (r in TAB_ROW_IDS.indices) {
+            val row = rows.getOrNull(r)
+            rv.setViewVisibility(TAB_ROW_IDS[r], if (row != null) View.VISIBLE else View.GONE)
+            for (c in TAB_CHIP_IDS[r].indices) {
+                val slot = TAB_CHIP_IDS[r][c]
+                val entry = row?.getOrNull(c)
+                if (entry == null) {
+                    rv.setViewVisibility(slot, View.GONE)
+                    continue
+                }
+                val (index, t) = entry
+                val isSel = t.id == selected
+                val text = TAB_CHIP_TEXT_IDS[r][c]
+                rv.setViewVisibility(slot, View.VISIBLE)
+                rv.setTextViewText(text, if (isSel) bold(label(t)) else label(t))
+                rv.setTextColor(text, if (isSel) p.onAccent else p.chipText)
+                rv.setTextViewTextSize(text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
+                rv.setInt(TAB_CHIP_BG_IDS[r][c], "setColorFilter", if (isSel) p.accent else p.chipBg)
+                rv.setOnClickPendingIntent(slot, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
+            }
+        }
     }
 }
 
 class ListWidgetReceiver : AppWidgetProvider() {
+
+    private companion object {
+        val lastWidth = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    }
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         WidgetRenderer.forceFull()
@@ -330,10 +336,13 @@ class ListWidgetReceiver : AppWidgetProvider() {
 
     override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
         Repo.init(context)
-        // Размер важен только для вкладок-чипов. Иначе не перерисовываем: лаунчер шлёт это событие
-        // после каждой отрисовки, и получалась частая серия лишних обновлений.
+        // Ширина важна только для раскладки чипов-вкладок. Перерисовываем лишь при реальном изменении
+        // ширины: лаунчер может слать это событие часто, а частые обновления ломают связь с ним.
         val ws = Repo.widgetSettings.value
-        if (ws.tabs && ws.tabStyle == "chips") WidgetRenderer.render(context, mgr, appWidgetId)
+        val w = newOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+        if (ws.tabs && ws.tabStyle == "chips" && lastWidth.put(appWidgetId, w) != w) {
+            WidgetRenderer.render(context, mgr, appWidgetId, full = false)
+        }
     }
 
     override fun onEnabled(context: Context) {

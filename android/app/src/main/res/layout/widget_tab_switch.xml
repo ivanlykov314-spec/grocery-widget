@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="fitXY"
-            android:src="@drawable/chip_sel_light" />
+            android:src="@drawable/chip_bg" />
 
         <TextView
             android:id="@+id/tab_current"
