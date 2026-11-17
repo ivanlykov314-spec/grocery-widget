@@ -424,7 +424,10 @@ class ListWidgetReceiver : AppWidgetProvider() {
                 WidgetRenderer.renderAll(ctx)
             }
             ACTION_FILTER -> {
-                Repo.setOnlyNeeded(!Repo.onlyNeeded.value)
+                val on = !Repo.onlyNeeded.value
+                Repo.setOnlyNeeded(on)
+                // «Купить» = всё, что нужно купить, из всех категорий — сразу, без перехода на «Все».
+                if (on) Repo.setSelectedTab(TAB_ALL)
                 WidgetRenderer.renderAll(ctx)
             }
             ACTION_REFRESH -> runAsync(ctx, "refresh") {
@@ -498,7 +501,9 @@ internal object WidgetRows {
         if (!item.inStock) sb.setSpan(StyleSpan(Typeface.BOLD), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (item.note.isNotBlank()) {
             val start = sb.length
-            sb.append("  ✎ ").append(item.note)
+            // Длинное название переносится на следующую строку, а комментарий идёт следом
+            // (✎ не отрывается от текста комментария), поэтому он больше не прячется за «…».
+            sb.append("  ✎ ").append(item.note)
             sb.setSpan(android.text.style.RelativeSizeSpan(0.8f), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             sb.setSpan(android.text.style.ForegroundColorSpan(pal.muted), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }

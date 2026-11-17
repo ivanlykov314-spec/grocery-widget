@@ -106,6 +106,25 @@ object Repo {
         refresh(context)
     }
 
+    /**
+     * Firebase включили на сервере уже после подключения телефона — забираем настройки сами,
+     * без «Отключиться/подключиться». Проверяем не чаще раза в 10 минут.
+     */
+    private var lastPushCheck = 0L
+
+    private suspend fun pickUpPushConfig(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastPushCheck < 10 * 60_000) return
+        lastPushCheck = now
+        val cfg = withContext(Dispatchers.IO) { api().request("GET", "/api/config") }
+        if (cfg.isNull("firebase")) return
+        prefs.edit()
+            .putString("topic", cfg.optString("topic"))
+            .putString("firebase", cfg.getJSONObject("firebase").toString())
+            .commit()
+        Push.init(context.applicationContext)
+    }
+
     fun disconnect() {
         val only = onlyNeeded.value
         val ws = widgetSettings.value.toJson()
@@ -185,6 +204,7 @@ object Repo {
             val s = withContext(Dispatchers.IO) { ListState.fromJson(api().request("GET", "/api/state")) }
             setServerState(s)
             lastError.value = null
+            if (firebaseJson == null) runCatching { pickUpPushConfig(context) }
         } catch (e: Exception) {
             lastError.value = "Нет связи с сервером"
             throw e
