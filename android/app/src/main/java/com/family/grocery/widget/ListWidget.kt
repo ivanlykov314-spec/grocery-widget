@@ -49,7 +49,7 @@ private const val EXTRA_ITEM = "itemId"
 private const val EXTRA_TAB = "tab"
 
 /** Цвета виджета (ARGB) с учётом темы и прозрачности. */
-private class Palette(
+internal class Palette(
     val night: Boolean,
     val bg: Int,
     val bgAlpha: Int,
@@ -62,7 +62,7 @@ private class Palette(
     val onAccent: Int,
 )
 
-private fun palette(ctx: Context, ws: WidgetSettings): Palette {
+internal fun palette(ctx: Context, ws: WidgetSettings): Palette {
     val night = when (ws.theme) {
         "light" -> false
         "dark" -> true
@@ -94,7 +94,7 @@ private fun palette(ctx: Context, ws: WidgetSettings): Palette {
     )
 }
 
-private fun bold(text: String): CharSequence =
+internal fun bold(text: String): CharSequence =
     SpannableString(text).apply { setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
 
 /** Какие группы показывать с учётом вкладки и фильтра. Порядок товаров — по алфавиту (без прыжков). */
@@ -114,6 +114,8 @@ internal fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings
 
 object WidgetRenderer {
 
+    @Volatile private var flip = false
+
     private fun component(ctx: Context) = ComponentName(ctx, ListWidgetReceiver::class.java)
 
     fun renderAll(context: Context) {
@@ -123,8 +125,10 @@ object WidgetRenderer {
         val ids = mgr.getAppWidgetIds(component(ctx))
         if (ids.isEmpty()) return
         ids.forEach { id -> render(ctx, mgr, id) }
-        @Suppress("DEPRECATION")
-        mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+        if (Build.VERSION.SDK_INT < 31) {
+            @Suppress("DEPRECATION")
+            mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+        }
     }
 
     fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int) {
@@ -157,7 +161,9 @@ object WidgetRenderer {
         val configured = Repo.isConfigured
         val tab = s.validTab(Repo.selectedTab.value)
         val p = palette(ctx, ws)
-        val rv = RemoteViews(ctx.packageName, R.layout.widget_root)
+        // Чередуем два одинаковых макета: лаунчер тогда каждый раз создаёт вид заново.
+        flip = !flip
+        val rv = RemoteViews(ctx.packageName, if (flip) R.layout.widget_root else R.layout.widget_root_b)
 
         // Фон и прозрачность
         rv.setInt(R.id.bg, "setColorFilter", p.bg)
@@ -215,11 +221,20 @@ object WidgetRenderer {
         }
 
         // Список товаров
-        val svc = Intent(ctx, ListWidgetService::class.java)
-            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-        svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
-        @Suppress("DEPRECATION")
-        rv.setRemoteAdapter(R.id.list, svc)
+        if (Build.VERSION.SDK_INT >= 31) {
+            // Android 12+: строки списка передаются прямо внутри обновления, без сервиса.
+            val rows = WidgetRows.build(ctx)
+            val b = RemoteViews.RemoteCollectionItems.Builder().setViewTypeCount(3).setHasStableIds(false)
+            rows.rows.forEachIndexed { i, row -> b.addItem(i.toLong(), WidgetRows.view(ctx, row, rows.ws, rows.pal)) }
+            rv.setRemoteAdapter(R.id.list, b.build())
+            Diag.event(ctx, "список (встроенный): ${rows.rows.size} строк")
+        } else {
+            val svc = Intent(ctx, ListWidgetService::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
+            @Suppress("DEPRECATION")
+            rv.setRemoteAdapter(R.id.list, svc)
+        }
         rv.setEmptyView(R.id.list, R.id.empty)
         val template = PendingIntent.getBroadcast(
             ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
@@ -356,84 +371,90 @@ class ListWidgetReceiver : AppWidgetProvider() {
     }
 }
 
-/** Отдаёт строки списка виджету: заголовки категорий и строки с 1–2 товарами. */
+/** Строки списка виджета: заголовки категорий и строки с 1–2 товарами. Общие для обоих способов показа списка. */
+internal object WidgetRows {
+    class Row(val header: String?, val items: List<Item>)
+    class Result(val rows: List<Row>, val ws: WidgetSettings, val pal: Palette)
+
+    fun build(ctx: Context): Result {
+        Repo.init(ctx)
+        val ws = Repo.widgetSettings.value
+        val pal = palette(ctx, ws)
+        return try {
+            val s = Repo.state.value
+            if (!Repo.isConfigured) return Result(emptyList(), ws, pal)
+            val tab = s.validTab(Repo.selectedTab.value)
+            val effectiveTab = if (ws.tabs) tab else TAB_ALL
+            val groups = visibleGroups(s, Repo.onlyNeeded.value, ws, effectiveTab)
+            val showHeaders = ws.showCategories && effectiveTab == TAB_ALL
+            val result = mutableListOf<Row>()
+            for (g in groups) {
+                if (showHeaders) result += Row(g.category?.name ?: "Без категории", emptyList())
+                g.items.chunked(if (ws.columns == 2) 2 else 1).forEach { result += Row(null, it) }
+            }
+            Result(result, ws, pal)
+        } catch (e: Exception) {
+            Diag.record(ctx, "widget list", e)
+            Result(emptyList(), ws, pal)
+        }
+    }
+
+    fun view(ctx: Context, row: Row?, ws: WidgetSettings, pal: Palette): RemoteViews {
+        if (row == null) return RemoteViews(ctx.packageName, R.layout.widget_header)
+        if (row.header != null) {
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_header)
+            rv.setTextViewText(R.id.header_text, row.header.uppercase())
+            rv.setTextColor(R.id.header_text, pal.accent)
+            rv.setTextViewTextSize(R.id.header_text, TypedValue.COMPLEX_UNIT_SP, (ws.textSize - 4).coerceAtLeast(10).toFloat())
+            return rv
+        }
+        val two = ws.columns == 2
+        val rv = RemoteViews(ctx.packageName, if (two) R.layout.widget_item2 else R.layout.widget_item1)
+        fillCell(ctx, rv, row.items.getOrNull(0), R.id.cell1, R.id.box1, R.id.name1, ws, pal)
+        if (two) fillCell(ctx, rv, row.items.getOrNull(1), R.id.cell2, R.id.box2, R.id.name2, ws, pal)
+        return rv
+    }
+
+    private fun fillCell(ctx: Context, rv: RemoteViews, item: Item?, cell: Int, box: Int, name: Int, ws: WidgetSettings, pal: Palette) {
+        if (item == null) {
+            rv.setViewVisibility(cell, View.INVISIBLE)
+            return
+        }
+        rv.setViewVisibility(cell, View.VISIBLE)
+        rv.setImageViewResource(box, if (item.inStock) R.drawable.ic_box_checked else R.drawable.ic_box_unchecked)
+        rv.setInt(box, "setColorFilter", if (item.inStock) pal.accent else pal.needed)
+        // Без галочки = нужно купить: цветом и жирным, но на том же месте в списке.
+        rv.setTextViewText(name, if (item.inStock) item.name else bold(item.name))
+        rv.setTextColor(name, if (item.inStock) pal.text else pal.needed)
+        rv.setTextViewTextSize(name, TypedValue.COMPLEX_UNIT_SP, ws.textSize.toFloat())
+        val pad = if (ws.compact) 3 else 6
+        val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, pad.toFloat(), ctx.resources.displayMetrics).toInt()
+        rv.setViewPadding(cell, px / 2, px, px, px)
+        rv.setOnClickFillInIntent(cell, Intent().putExtra(EXTRA_ITEM, item.id))
+    }
+}
+
+/** Список через сервис — только для Android 11 и ниже. */
 class ListWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = Factory(applicationContext)
 
-    private class Row(val header: String?, val items: List<Item>)
-
     private class Factory(private val ctx: Context) : RemoteViewsFactory {
-        private var rows: List<Row> = emptyList()
-        private var ws = WidgetSettings()
-        private var p: Palette? = null
+        private var data: WidgetRows.Result? = null
 
         override fun onCreate() {}
-
         override fun onDataSetChanged() {
-            try {
-                Repo.init(ctx)
-                val s = Repo.state.value
-                ws = Repo.widgetSettings.value
-                p = palette(ctx, ws)
-                if (!Repo.isConfigured) { rows = emptyList(); return }
-                val tab = s.validTab(Repo.selectedTab.value)
-                val effectiveTab = if (ws.tabs) tab else TAB_ALL
-                val groups = visibleGroups(s, Repo.onlyNeeded.value, ws, effectiveTab)
-                val showHeaders = ws.showCategories && effectiveTab == TAB_ALL
-                val result = mutableListOf<Row>()
-                for (g in groups) {
-                    if (showHeaders) result += Row(g.category?.name ?: "Без категории", emptyList())
-                    g.items.chunked(if (ws.columns == 2) 2 else 1).forEach { result += Row(null, it) }
-                }
-                rows = result
-                Diag.event(ctx, "список: ${result.size} строк")
-            } catch (e: Exception) {
-                Diag.record(ctx, "widget list", e)
-                rows = emptyList()
-            }
+            data = WidgetRows.build(ctx)
+            Diag.event(ctx, "список (сервис): ${data?.rows?.size} строк")
         }
-
         override fun onDestroy() {}
-        override fun getCount(): Int = rows.size
+        override fun getCount(): Int = data?.rows?.size ?: 0
         override fun getLoadingView(): RemoteViews? = null
         override fun getViewTypeCount(): Int = 3
         override fun getItemId(position: Int): Long = position.toLong()
         override fun hasStableIds(): Boolean = false
-
         override fun getViewAt(position: Int): RemoteViews {
-            val pal = p ?: palette(ctx, ws)
-            val row = rows.getOrNull(position)
-                ?: return RemoteViews(ctx.packageName, R.layout.widget_header)
-            if (row.header != null) {
-                val rv = RemoteViews(ctx.packageName, R.layout.widget_header)
-                rv.setTextViewText(R.id.header_text, row.header.uppercase())
-                rv.setTextColor(R.id.header_text, pal.accent)
-                rv.setTextViewTextSize(R.id.header_text, TypedValue.COMPLEX_UNIT_SP, (ws.textSize - 4).coerceAtLeast(10).toFloat())
-                return rv
-            }
-            val two = ws.columns == 2
-            val rv = RemoteViews(ctx.packageName, if (two) R.layout.widget_item2 else R.layout.widget_item1)
-            fillCell(rv, row.items.getOrNull(0), R.id.cell1, R.id.box1, R.id.name1, pal)
-            if (two) fillCell(rv, row.items.getOrNull(1), R.id.cell2, R.id.box2, R.id.name2, pal)
-            return rv
-        }
-
-        private fun fillCell(rv: RemoteViews, item: Item?, cell: Int, box: Int, name: Int, pal: Palette) {
-            if (item == null) {
-                rv.setViewVisibility(cell, View.INVISIBLE)
-                return
-            }
-            rv.setViewVisibility(cell, View.VISIBLE)
-            rv.setImageViewResource(box, if (item.inStock) R.drawable.ic_box_checked else R.drawable.ic_box_unchecked)
-            rv.setInt(box, "setColorFilter", if (item.inStock) pal.accent else pal.needed)
-            // Без галочки = нужно купить: цветом и жирным, но на том же месте в списке.
-            rv.setTextViewText(name, if (item.inStock) item.name else bold(item.name))
-            rv.setTextColor(name, if (item.inStock) pal.text else pal.needed)
-            rv.setTextViewTextSize(name, TypedValue.COMPLEX_UNIT_SP, ws.textSize.toFloat())
-            val pad = if (ws.compact) 3 else 6
-            val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, pad.toFloat(), ctx.resources.displayMetrics).toInt()
-            rv.setViewPadding(cell, px / 2, px, px, px)
-            rv.setOnClickFillInIntent(cell, Intent().putExtra(EXTRA_ITEM, item.id))
+            val d = data ?: WidgetRows.build(ctx).also { data = it }
+            return WidgetRows.view(ctx, d.rows.getOrNull(position), d.ws, d.pal)
         }
     }
 }
