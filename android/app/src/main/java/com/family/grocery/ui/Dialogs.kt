@@ -66,6 +66,66 @@ private fun friendly(e: Exception): String =
     e.message?.takeIf { it.isNotBlank() && !it.contains("Exception") }
         ?: "Нет связи с сервером"
 
+/** Комментарий к товару: «10 штук», «без лактозы»… Виден в приложении и на виджете. */
+@Composable
+fun NoteDialog(item: Item, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var note by remember { mutableStateOf(item.note) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { focus.requestFocus() }
+    }
+    fun save(value: String) {
+        if (busy) return
+        scope.launch {
+            busy = true; error = null
+            try {
+                Repo.setNote(ctx, item.id, value)
+                onDismiss()
+            } catch (e: Exception) {
+                error = friendly(e)
+            } finally {
+                busy = false
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { if (it.length <= 200) note = it },
+                    label = { Text("Комментарий") },
+                    placeholder = { Text("например: 10 штук") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { save(note) }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { TextButton(onClick = { save(note) }, enabled = !busy) { Text("Сохранить") } },
+        dismissButton = {
+            Row {
+                if (item.note.isNotBlank()) {
+                    TextButton(onClick = { save("") }, enabled = !busy) { Text("Убрать") }
+                }
+                TextButton(onClick = onDismiss) { Text("Отмена") }
+            }
+        },
+    )
+}
+
 /** Выбор категории: «Без категории», существующие и «+ Новая». */
 @Composable
 private fun CategoryPicker(

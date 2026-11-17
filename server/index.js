@@ -44,6 +44,8 @@ async function migrate() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- Комментарий к товару («10 штук», «без лактозы»…)
+    ALTER TABLE items ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';
   `);
 }
 
@@ -142,7 +144,7 @@ function cleanName(v) {
 async function getState() {
   const cats = await pool.query('SELECT id, name FROM categories ORDER BY position, id');
   const items = await pool.query(
-    'SELECT id, category_id, name, in_stock FROM items ORDER BY lower(name), id'
+    'SELECT id, category_id, name, in_stock, note FROM items ORDER BY lower(name), id'
   );
   return {
     categories: cats.rows.map((r) => ({ id: r.id, name: r.name })),
@@ -151,6 +153,7 @@ async function getState() {
       categoryId: r.category_id,
       name: r.name,
       inStock: r.in_stock,
+      note: r.note || '',
     })),
   };
 }
@@ -223,6 +226,10 @@ app.patch('/api/items/:id', wrap(async (req, res) => {
     vals.push(name); sets.push(`name = $${vals.length}`);
   }
   if (b.categoryId !== undefined) { vals.push(b.categoryId); sets.push(`category_id = $${vals.length}`); }
+  if (b.note !== undefined) {
+    const note = typeof b.note === 'string' ? b.note.trim().replace(/\s+/g, ' ').slice(0, 200) : '';
+    vals.push(note); sets.push(`note = $${vals.length}`);
+  }
   if (sets.length) {
     vals.push(id);
     await pool.query(

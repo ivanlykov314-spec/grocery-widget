@@ -45,6 +45,8 @@ private const val ACTION_TOGGLE = "com.family.grocery.TOGGLE"
 private const val ACTION_TAB = "com.family.grocery.TAB"
 private const val ACTION_FILTER = "com.family.grocery.FILTER"
 private const val ACTION_REFRESH = "com.family.grocery.REFRESH"
+private const val ACTION_PAGE = "com.family.grocery.PAGE"
+private const val EXTRA_PAGE = "page"
 private const val EXTRA_ITEM = "itemId"
 private const val EXTRA_TAB = "tab"
 
@@ -170,6 +172,8 @@ object WidgetRenderer {
     private fun build(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int, withList: Boolean): RemoteViews {
         val s = Repo.state.value
         val ws = Repo.widgetSettings.value
+        // Купить нечего — режим «только нужное» выключается сам (кнопка «Купить» скрыта).
+        if (Repo.onlyNeeded.value && s.neededCount == 0) Repo.setOnlyNeeded(false)
         val only = Repo.onlyNeeded.value
         val configured = Repo.isConfigured
         val tab = s.validTab(Repo.selectedTab.value)
@@ -191,10 +195,17 @@ object WidgetRenderer {
         rv.setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, (ws.textSize + 2).toFloat())
         rv.setOnClickPendingIntent(R.id.title, activity(ctx, MainActivity::class.java, 10))
 
-        rv.setTextViewText(R.id.chip_text, if (only) "Купить: ${s.neededCount}" else "Все · купить ${s.neededCount}")
-        rv.setTextColor(R.id.chip_text, p.chipText)
-        rv.setInt(R.id.chip_bg, "setColorFilter", p.chipBg)
-        rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
+        // Кнопка «Купить» — только когда есть что купить; нажата = показываем только нужное.
+        if (configured && s.neededCount > 0) {
+            rv.setViewVisibility(R.id.chip, View.VISIBLE)
+            rv.setTextViewText(R.id.chip_text, if (only) bold("Купить") else "Купить")
+            rv.setTextColor(R.id.chip_text, if (only) p.onAccent else p.chipText)
+            rv.setImageViewResource(R.id.chip_bg, if (only) R.drawable.chip_bg else R.drawable.chip_outline)
+            rv.setInt(R.id.chip_bg, "setColorFilter", if (only) p.accent else p.muted)
+            rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
+        } else {
+            rv.setViewVisibility(R.id.chip, View.GONE)
+        }
 
         rv.setInt(R.id.btn_refresh, "setColorFilter", p.text)
         rv.setInt(R.id.btn_add, "setColorFilter", p.text)
@@ -217,7 +228,8 @@ object WidgetRenderer {
         if (showTabs && chips) {
             val widthDp = mgr.getAppWidgetOptions(appWidgetId)
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
-            fillTabChips(ctx, rv, s.tabs(), tab, p, ws, (widthDp - (if (ws.compact) 12 else 20) - 4).toFloat())
+            // ширина строки чипов: минус отступы виджета и две стрелки по 28dp
+            fillTabChips(ctx, rv, s.tabs(), tab, p, ws, (widthDp - (if (ws.compact) 12 else 20) - 56 - 4).toFloat())
             rv.setViewVisibility(R.id.tabs, View.VISIBLE)
         } else {
             rv.setViewVisibility(R.id.tabs, View.GONE)
@@ -279,46 +291,53 @@ object WidgetRenderer {
         rv.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
     }
 
-    /** Чипы-вкладки по строкам в заготовленных местах макета; лишние места скрываются. */
+    /** Чипы-вкладки в одну строку, по страницам: ‹ › листают страницы, нажатие на чип выбирает категорию. */
     private fun fillTabChips(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int,
         p: Palette, ws: WidgetSettings, available: Float,
     ) {
         val fontSp = if (ws.compact) 12 else 13
         fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
-        // Раскладка по строкам: ~0.6 кегля на символ + внутренние отступы + промежуток.
-        val rows = mutableListOf<MutableList<Pair<Int, CategoryTab>>>()
+        // Разбивка на страницы: ~0.6 кегля на символ + внутренние отступы + промежуток.
+        val pages = mutableListOf<MutableList<Pair<Int, CategoryTab>>>()
         var used = 0f
         tabs.forEachIndexed { index, t ->
-            val w = label(t).length * fontSp * 0.6f + 18f + 6f
-            if (rows.isEmpty() || used + w > available || rows.last().size >= TAB_CHIP_IDS[0].size) {
-                rows += mutableListOf<Pair<Int, CategoryTab>>()
+            val w = label(t).length * fontSp * 0.6f + 18f + 5f
+            if (pages.isEmpty() || used + w > available || pages.last().size >= TAB_CHIP_IDS.size) {
+                pages += mutableListOf<Pair<Int, CategoryTab>>()
                 used = 0f
             }
             used += w
-            rows.last() += index to t
+            pages.last() += index to t
         }
-        for (r in TAB_ROW_IDS.indices) {
-            val row = rows.getOrNull(r)
-            rv.setViewVisibility(TAB_ROW_IDS[r], if (row != null) View.VISIBLE else View.GONE)
-            for (c in TAB_CHIP_IDS[r].indices) {
-                val slot = TAB_CHIP_IDS[r][c]
-                val entry = row?.getOrNull(c)
-                if (entry == null) {
-                    rv.setViewVisibility(slot, View.GONE)
-                    continue
-                }
-                val (index, t) = entry
-                val isSel = t.id == selected
-                val text = TAB_CHIP_TEXT_IDS[r][c]
-                rv.setViewVisibility(slot, View.VISIBLE)
-                rv.setTextViewText(text, if (isSel) bold(label(t)) else label(t))
-                rv.setTextColor(text, if (isSel) p.onAccent else p.chipText)
-                rv.setTextViewTextSize(text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
-                rv.setInt(TAB_CHIP_BG_IDS[r][c], "setColorFilter", if (isSel) p.accent else p.chipBg)
-                rv.setOnClickPendingIntent(slot, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
+        val selPage = pages.indexOfFirst { pg -> pg.any { it.second.id == selected } }.coerceAtLeast(0)
+        val page = (if (Repo.tabPage < 0) selPage else Repo.tabPage).coerceIn(0, pages.lastIndex)
+        val cur = pages[page]
+        for (c in TAB_CHIP_IDS.indices) {
+            val slot = TAB_CHIP_IDS[c]
+            val entry = cur.getOrNull(c)
+            if (entry == null) {
+                rv.setViewVisibility(slot, View.GONE)
+                continue
             }
+            val (index, t) = entry
+            val isSel = t.id == selected
+            val text = TAB_CHIP_TEXT_IDS[c]
+            rv.setViewVisibility(slot, View.VISIBLE)
+            rv.setTextViewText(text, if (isSel) bold(label(t)) else label(t))
+            rv.setTextColor(text, if (isSel) p.onAccent else p.chipText)
+            rv.setTextViewTextSize(text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
+            rv.setImageViewResource(TAB_CHIP_BG_IDS[c], if (isSel) R.drawable.chip_bg else R.drawable.chip_outline)
+            rv.setInt(TAB_CHIP_BG_IDS[c], "setColorFilter", if (isSel) p.accent else p.muted)
+            rv.setOnClickPendingIntent(slot, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
         }
+        // Стрелки: невидимые (а не скрытые), чтобы строка не прыгала.
+        rv.setViewVisibility(R.id.page_prev, if (page > 0) View.VISIBLE else View.INVISIBLE)
+        rv.setViewVisibility(R.id.page_next, if (page < pages.lastIndex) View.VISIBLE else View.INVISIBLE)
+        rv.setInt(R.id.page_prev, "setColorFilter", p.text)
+        rv.setInt(R.id.page_next, "setColorFilter", p.text)
+        rv.setOnClickPendingIntent(R.id.page_prev, broadcast(ctx, ACTION_PAGE, 50) { putExtra(EXTRA_PAGE, page - 1) })
+        rv.setOnClickPendingIntent(R.id.page_next, broadcast(ctx, ACTION_PAGE, 51) { putExtra(EXTRA_PAGE, page + 1) })
     }
 }
 
@@ -363,7 +382,11 @@ class ListWidgetReceiver : AppWidgetProvider() {
                 runAsync(ctx, "toggle") { Repo.setInStock(ctx, id, !current.inStock) }
             }
             ACTION_TAB -> {
-                Repo.setSelectedTab(intent.getIntExtra(EXTRA_TAB, TAB_ALL))
+                Repo.setSelectedTab(intent.getIntExtra(EXTRA_TAB, TAB_ALL), keepPage = true)
+                WidgetRenderer.renderAll(ctx)
+            }
+            ACTION_PAGE -> {
+                Repo.tabPage = intent.getIntExtra(EXTRA_PAGE, 0).coerceAtLeast(0)
                 WidgetRenderer.renderAll(ctx)
             }
             ACTION_FILTER -> {
@@ -435,6 +458,19 @@ internal object WidgetRows {
         return rv
     }
 
+    /** Название (жирное, если нужно купить) и мелкая пометка с комментарием: «Яйца  ✎ 10 штук». */
+    private fun itemLabel(item: Item, pal: Palette): CharSequence {
+        val sb = android.text.SpannableStringBuilder(item.name)
+        if (!item.inStock) sb.setSpan(StyleSpan(Typeface.BOLD), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (item.note.isNotBlank()) {
+            val start = sb.length
+            sb.append("  ✎ ").append(item.note)
+            sb.setSpan(android.text.style.RelativeSizeSpan(0.8f), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sb.setSpan(android.text.style.ForegroundColorSpan(pal.muted), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return sb
+    }
+
     private fun fillCell(ctx: Context, rv: RemoteViews, item: Item?, cell: Int, box: Int, name: Int, ws: WidgetSettings, pal: Palette) {
         if (item == null) {
             rv.setViewVisibility(cell, View.INVISIBLE)
@@ -444,7 +480,7 @@ internal object WidgetRows {
         rv.setImageViewResource(box, if (item.inStock) R.drawable.ic_box_checked else R.drawable.ic_box_unchecked)
         rv.setInt(box, "setColorFilter", if (item.inStock) pal.accent else pal.needed)
         // Без галочки = нужно купить: цветом и жирным, но на том же месте в списке.
-        rv.setTextViewText(name, if (item.inStock) item.name else bold(item.name))
+        rv.setTextViewText(name, itemLabel(item, pal))
         rv.setTextColor(name, if (item.inStock) pal.text else pal.needed)
         rv.setTextViewTextSize(name, TypedValue.COMPLEX_UNIT_SP, ws.textSize.toFloat())
         val pad = if (ws.compact) 3 else 6

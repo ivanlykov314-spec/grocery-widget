@@ -140,7 +140,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             if (ws.tabs) {
                 Label("Вид вкладок")
                 Choice(
-                    listOf("chips" to "Все сразу", "arrows" to "‹ Одна строка ›"),
+                    listOf("chips" to "Строка категорий", "arrows" to "‹ Одна категория ›"),
                     ws.tabStyle,
                 ) { save(ws.copy(tabStyle = it)) }
             }

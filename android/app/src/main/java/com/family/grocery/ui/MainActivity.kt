@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.family.grocery.ui
 
@@ -11,6 +11,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -194,6 +195,7 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     var showNewCategory by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<Item?>(null) }
+    var noteItem by remember { mutableStateOf<Item?>(null) }
     var editCategory by remember { mutableStateOf<Category?>(null) }
     var menu by remember { mutableStateOf(false) }
     var widgetPlaced by remember { mutableStateOf(hasWidget(ctx)) }
@@ -329,7 +331,8 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable { editItem = item }
+                                // Нажатие — изменить товар, долгое нажатие — комментарий («10 штук»).
+                                .combinedClickable(onClick = { editItem = item }, onLongClick = { noteItem = item })
                                 .padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -337,12 +340,20 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                                 checked = item.inStock,
                                 onCheckedChange = { v -> scope.launch { Repo.setInStock(ctx, item.id, v) } },
                             )
-                            Text(
-                                item.name,
-                                modifier = Modifier.weight(1f),
-                                fontWeight = if (item.inStock) FontWeight.Normal else FontWeight.Bold,
-                                color = if (item.inStock) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.name,
+                                    fontWeight = if (item.inStock) FontWeight.Normal else FontWeight.Bold,
+                                    color = if (item.inStock) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                                )
+                                if (item.note.isNotBlank()) {
+                                    Text(
+                                        "✎ ${item.note}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -354,5 +365,6 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     if (showAdd) AddItemDialog(onDismiss = { showAdd = false })
     if (showNewCategory) CategoryDialog(category = null, onDismiss = { showNewCategory = false })
     editItem?.let { EditItemDialog(it, onDismiss = { editItem = null }) }
+    noteItem?.let { NoteDialog(it, onDismiss = { noteItem = null }) }
     editCategory?.let { CategoryDialog(it, onDismiss = { editCategory = null }) }
 }

@@ -69,8 +69,12 @@ object Repo {
         prefs.edit().putBoolean("onlyNeeded", value).apply()
     }
 
-    fun setSelectedTab(tab: Int) {
+    /** Страница вкладок в виджете (листание ‹ ›); -1 — показать страницу с выбранной вкладкой. */
+    @Volatile var tabPage = -1
+
+    fun setSelectedTab(tab: Int, keepPage: Boolean = false) {
         selectedTab.value = tab
+        if (!keepPage) tabPage = -1
         prefs.edit().putInt("selectedTab", tab).apply()
     }
 
@@ -224,6 +228,11 @@ object Repo {
             context, "PATCH", "/api/items/$id",
             JSONObject().put("name", name).put("categoryId", categoryId ?: JSONObject.NULL)
         )
+    }
+
+    /** Комментарий к товару («10 штук»). Пустая строка — убрать комментарий. */
+    suspend fun setNote(context: Context, id: Int, note: String) {
+        mutate(context, "PATCH", "/api/items/$id", JSONObject().put("note", note.trim()))
     }
 
     suspend fun deleteItem(context: Context, id: Int) {

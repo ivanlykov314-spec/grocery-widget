@@ -6,7 +6,7 @@ import org.json.JSONObject
 data class Category(val id: Int, val name: String)
 
 /** inStock = true — галочка стоит (товар есть дома). false — нужно купить. */
-data class Item(val id: Int, val categoryId: Int?, val name: String, val inStock: Boolean)
+data class Item(val id: Int, val categoryId: Int?, val name: String, val inStock: Boolean, val note: String = "")
 
 data class Group(val category: Category?, val items: List<Item>)
 
@@ -69,6 +69,7 @@ data class ListState(val categories: List<Category>, val items: List<Item>) {
                     .put("categoryId", it.categoryId ?: JSONObject.NULL)
                     .put("name", it.name)
                     .put("inStock", it.inStock)
+                    .put("note", it.note)
             )
         }
         return JSONObject().put("categories", cats).put("items", its)
@@ -92,6 +93,7 @@ data class ListState(val categories: List<Category>, val items: List<Item>) {
                         categoryId = if (i.isNull("categoryId")) null else i.getInt("categoryId"),
                         name = i.getString("name"),
                         inStock = i.getBoolean("inStock"),
+                        note = i.optString("note", ""),
                     )
                 },
             )
