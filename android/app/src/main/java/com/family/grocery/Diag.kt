@@ -25,7 +25,27 @@ object Diag {
 
     fun clear(ctx: Context) {
         runCatching { file(ctx).delete() }
+        runCatching { events(ctx).delete() }
     }
+
+    // ---- Журнал событий виджета (временно, для поиска «кнопки не работают») ----
+    private fun events(ctx: Context) = File(ctx.applicationContext.filesDir, "widget_events.txt")
+
+    /** Добавить строку в журнал; хранятся последние 40 строк. */
+    @Synchronized
+    fun event(ctx: Context, msg: String) {
+        Log.i("Grocery", msg)
+        runCatching {
+            val time = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            val f = events(ctx)
+            val old = if (f.exists()) f.readLines() else emptyList()
+            f.writeText((old + "$time $msg").takeLast(40).joinToString("\n"))
+        }
+    }
+
+    fun readEvents(ctx: Context): String? = runCatching {
+        events(ctx).takeIf { it.exists() }?.readText()
+    }.getOrNull()
 
     fun installCrashHandler(ctx: Context) {
         val app = ctx.applicationContext

@@ -130,6 +130,7 @@ object WidgetRenderer {
     fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int) {
         try {
             mgr.updateAppWidget(appWidgetId, build(ctx, mgr, appWidgetId))
+            Diag.event(ctx, "отрисован виджет $appWidgetId")
         } catch (e: Exception) {
             Diag.record(ctx, "widget render", e)
         }
@@ -168,6 +169,8 @@ object WidgetRenderer {
 
         // Заголовок
         rv.setViewVisibility(R.id.title, if (ws.showTitle) View.VISIBLE else View.INVISIBLE)
+        // ВРЕМЕННО: время отрисовки в заголовке — видно, доходят ли обновления до экрана.
+        rv.setTextViewText(R.id.title, "Покупки " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
         rv.setTextColor(R.id.title, p.text)
         rv.setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, (ws.textSize + 2).toFloat())
         rv.setOnClickPendingIntent(R.id.title, activity(ctx, MainActivity::class.java, 10))
@@ -312,6 +315,7 @@ class ListWidgetReceiver : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val ctx = context.applicationContext
+        Diag.event(ctx, "получено: ${intent.action?.substringAfterLast('.')} item=${intent.getIntExtra(EXTRA_ITEM, -1)} tab=${intent.getIntExtra(EXTRA_TAB, -99)}")
         Repo.init(ctx)
         when (intent.action) {
             ACTION_TOGGLE -> {
@@ -379,6 +383,7 @@ class ListWidgetService : RemoteViewsService() {
                     g.items.chunked(if (ws.columns == 2) 2 else 1).forEach { result += Row(null, it) }
                 }
                 rows = result
+                Diag.event(ctx, "список: ${result.size} строк")
             } catch (e: Exception) {
                 Diag.record(ctx, "widget list", e)
                 rows = emptyList()

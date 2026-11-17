@@ -173,8 +173,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                     fontFamily = FontFamily.Monospace,
                 )
             }
-            if (lastError != null) {
-                OutlinedButton(onClick = { Diag.clear(ctx); lastError = null }, modifier = Modifier.fillMaxWidth()) {
+            var events by remember { mutableStateOf(Diag.readEvents(ctx)) }
+            Label("Журнал виджета (последние события)")
+            SelectionContainer {
+                Text(
+                    events ?: "Пусто — виджет ещё ничего не получал",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { lastError = Diag.read(ctx); events = Diag.readEvents(ctx) }, modifier = Modifier.weight(1f)) {
+                    Text("Обновить")
+                }
+                OutlinedButton(onClick = { Diag.clear(ctx); lastError = null; events = null }, modifier = Modifier.weight(1f)) {
                     Text("Очистить")
                 }
             }
