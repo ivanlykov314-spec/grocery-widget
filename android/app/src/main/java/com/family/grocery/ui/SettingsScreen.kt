@@ -140,7 +140,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             SwitchRow("Показывать категории", "На вкладке «Все»: если выключить — один общий список по алфавиту", ws.showCategories) {
                 save(ws.copy(showCategories = it))
             }
-            SwitchRow("Сначала то, что нужно купить", "Товары без галочки поднимаются наверх", ws.neededFirst) {
+            SwitchRow("Сначала то, что нужно купить", "Товары без галочки поднимаются наверх (при снятии галочки товар переместится)", ws.neededFirst) {
                 save(ws.copy(neededFirst = it))
             }
             SwitchRow(

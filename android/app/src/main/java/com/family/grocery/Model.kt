@@ -107,7 +107,7 @@ data class WidgetSettings(
     val columns: Int = 1,            // 1 или 2 колонки товаров
     val showTitle: Boolean = true,   // заголовок «Покупки» и счётчик
     val showCategories: Boolean = true,
-    val neededFirst: Boolean = true, // внутри категории сначала то, что нужно купить
+    val neededFirst: Boolean = false, // внутри категории сначала то, что нужно купить (товары «прыгают»)
     val compact: Boolean = false,    // меньше отступы
     val neededColor: String = "red", // red | orange | accent
     val tabs: Boolean = true,        // категории вкладками
@@ -115,7 +115,7 @@ data class WidgetSettings(
     fun toJson(): String = JSONObject()
         .put("opacity", opacity).put("theme", theme).put("textSize", textSize)
         .put("columns", columns).put("showTitle", showTitle).put("showCategories", showCategories)
-        .put("neededFirst", neededFirst).put("compact", compact).put("neededColor", neededColor).put("tabs", tabs)
+        .put("sortNeeded", neededFirst).put("compact", compact).put("neededColor", neededColor).put("tabs", tabs)
         .toString()
 
     companion object {
@@ -131,7 +131,7 @@ data class WidgetSettings(
                     columns = o.optInt("columns", d.columns).coerceIn(1, 2),
                     showTitle = o.optBoolean("showTitle", d.showTitle),
                     showCategories = o.optBoolean("showCategories", d.showCategories),
-                    neededFirst = o.optBoolean("neededFirst", d.neededFirst),
+                    neededFirst = o.optBoolean("sortNeeded", d.neededFirst),
                     compact = o.optBoolean("compact", d.compact),
                     neededColor = o.optString("neededColor", d.neededColor),
                     tabs = o.optBoolean("tabs", d.tabs),

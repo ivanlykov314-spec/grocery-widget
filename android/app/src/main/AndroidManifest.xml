@@ -43,6 +43,11 @@
         </receiver>
 
         <service
+            android:name=".widget.ListWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <service
             android:name=".PushService"
             android:exported="false">
             <intent-filter>

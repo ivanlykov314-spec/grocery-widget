@@ -2,8 +2,7 @@ package com.family.grocery
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.glance.appwidget.updateAll
-import com.family.grocery.widget.ListWidget
+import com.family.grocery.widget.WidgetRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -135,7 +134,7 @@ object Repo {
     }
 
     suspend fun updateWidgets(context: Context) {
-        runCatching { ListWidget().updateAll(context.applicationContext) }
+        runCatching { WidgetRenderer.renderAll(context.applicationContext) }
     }
 
     // ---------- Синхронизация ----------

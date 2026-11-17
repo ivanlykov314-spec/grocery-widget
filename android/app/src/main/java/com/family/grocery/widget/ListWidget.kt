@@ -2,55 +2,22 @@ package com.family.grocery.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.widget.RemoteViews
+import android.content.res.Configuration
+import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.glance.ColorFilter
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.action.Action
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.actionStartActivity
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.CheckBox
-import androidx.glance.appwidget.CheckboxDefaults
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.ToggleableStateKey
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.lazy.LazyColumn
-import androidx.glance.appwidget.lazy.items
-import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
-import androidx.glance.background
-import androidx.glance.color.ColorProvider as DayNightColorProvider
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.layout.width
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.util.TypedValue
+import android.view.View
+import android.widget.RemoteViews
+import android.widget.RemoteViewsService
 import com.family.grocery.CategoryTab
 import com.family.grocery.Diag
 import com.family.grocery.Group
@@ -68,178 +35,67 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-class ListWidget : GlanceAppWidget() {
-    /**
-     * Если отрисовка упала: запоминаем ошибку, при сбое на вкладке возвращаемся на «Все»,
-     * а на самом виджете показываем текст ошибки вместо вечной загрузки.
-     */
-    override fun onCompositionError(context: Context, glanceId: GlanceId, appWidgetId: Int, throwable: Throwable) {
-        Diag.record(context, "widget", throwable)
-        Repo.init(context)
-        if (Repo.selectedTab.value != TAB_ALL) {
-            Repo.setSelectedTab(TAB_ALL)
-            CoroutineScope(Dispatchers.Default).launch { runCatching { ListWidget().updateAll(context) } }
-        }
-        val rv = RemoteViews(context.packageName, R.layout.widget_error)
-        rv.setTextViewText(
-            R.id.error_text,
-            "Ошибка виджета:\n${throwable.javaClass.simpleName}: ${throwable.message.orEmpty()}\n\n" +
-                "Нажмите, чтобы открыть приложение. Подробности: ⋮ → Настройки виджета → в самом низу.",
-        )
-        val open = PendingIntent.getActivity(
-            context, 0, Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        rv.setOnClickPendingIntent(R.id.error_root, open)
-        runCatching { AppWidgetManager.getInstance(context).updateAppWidget(appWidgetId, rv) }
-    }
+/*
+ * Виджет на классических RemoteViews: рисуется сразу, без фоновых задач WorkManager,
+ * поэтому не «зависает» на загрузке даже на Xiaomi/Samsung с жёсткой экономией батареи.
+ */
 
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        Repo.init(context)
-        // Ширина виджета нужна, чтобы переносить вкладки по строкам.
-        val widthDp = runCatching {
-            GlanceAppWidgetManager(context).getAppWidgetSizes(id).maxOfOrNull { it.width.value }
-        }.getOrNull() ?: 250f
-        provideContent {
-            val s by Repo.state.collectAsState()
-            val only by Repo.onlyNeeded.collectAsState()
-            val error by Repo.lastError.collectAsState()
-            val settings by Repo.widgetSettings.collectAsState()
-            val tab by Repo.selectedTab.collectAsState()
-            WidgetBody(s, only, Repo.isConfigured, error, palette(context, settings), settings, s.validTab(tab), widthDp)
-        }
-    }
-}
+private const val ACTION_TOGGLE = "com.family.grocery.TOGGLE"
+private const val ACTION_TAB = "com.family.grocery.TAB"
+private const val ACTION_FILTER = "com.family.grocery.FILTER"
+private const val ACTION_REFRESH = "com.family.grocery.REFRESH"
+private const val EXTRA_ITEM = "itemId"
+private const val EXTRA_TAB = "tab"
 
-class ListWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = ListWidget()
-
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        Sync.schedulePeriodic(context)
-        Sync.syncSoon(context)
-    }
-}
-
-private val ItemIdKey = ActionParameters.Key<Int>("itemId")
-private val TabKey = ActionParameters.Key<Int>("tab")
-
-/** Цвета виджета с учётом темы и прозрачности из настроек. */
+/** Цвета виджета (ARGB) с учётом темы и прозрачности. */
 private class Palette(
-    val background: ColorProvider,
-    val text: ColorProvider,
-    val muted: ColorProvider,
-    val accent: ColorProvider,
-    val needed: ColorProvider,
-    val chipBg: ColorProvider,
-    val chipText: ColorProvider,
-    val onAccent: ColorProvider,
+    val bg: Int,
+    val bgAlpha: Int,
+    val text: Int,
+    val muted: Int,
+    val accent: Int,
+    val needed: Int,
+    val chipBg: Int,
+    val chipText: Int,
+    val onAccent: Int,
 )
 
 private fun palette(ctx: Context, ws: WidgetSettings): Palette {
-    val dyn = Build.VERSION.SDK_INT >= 31
-    fun sys(id: Int, fallback: Long) = if (dyn) Color(ctx.getColor(id)) else Color(fallback)
-    fun cp(light: Color, dark: Color): ColorProvider = when (ws.theme) {
-        "light" -> ColorProvider(light)
-        "dark" -> ColorProvider(dark)
-        else -> DayNightColorProvider(day = light, night = dark)
+    val night = when (ws.theme) {
+        "light" -> false
+        "dark" -> true
+        else -> (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
     }
-    val alpha = ws.opacity / 100f
-    val bgLight = sys(android.R.color.system_neutral1_50, 0xFFF7F7F2)
-    val bgDark = sys(android.R.color.system_neutral1_900, 0xFF1C1B1F)
-    val accentLight = sys(android.R.color.system_accent1_600, 0xFF2E7D32)
-    val accentDark = sys(android.R.color.system_accent1_200, 0xFFA5D6A7)
-    val (neededLight, neededDark) = when (ws.neededColor) {
-        "orange" -> Color(0xFFE65100) to Color(0xFFFFB74D)
-        "accent" -> accentLight to accentDark
-        else -> Color(0xFFC62828) to Color(0xFFFF8A80)
+    val dyn = Build.VERSION.SDK_INT >= 31
+    fun sys(id: Int, fallback: Long): Int = if (dyn) ctx.getColor(id) else fallback.toInt()
+    val accent = if (night) sys(android.R.color.system_accent1_200, 0xFFA5D6A7)
+    else sys(android.R.color.system_accent1_600, 0xFF2E7D32)
+    val needed = when (ws.neededColor) {
+        "orange" -> if (night) 0xFFFFB74D.toInt() else 0xFFE65100.toInt()
+        "accent" -> accent
+        else -> if (night) 0xFFFF8A80.toInt() else 0xFFC62828.toInt()
     }
     return Palette(
-        background = cp(bgLight.copy(alpha = alpha), bgDark.copy(alpha = alpha)),
-        text = cp(Color(0xFF1B1B1F), Color(0xFFE6E1E5)),
-        muted = cp(Color(0xFF5F5E62), Color(0xFFB0ADB3)),
-        accent = cp(accentLight, accentDark),
-        needed = cp(neededLight, neededDark),
-        chipBg = cp(
-            sys(android.R.color.system_accent2_100, 0xFFDDE5DB),
-            sys(android.R.color.system_accent2_700, 0xFF3F4A3F),
-        ),
-        chipText = cp(Color(0xFF1B1B1F), Color(0xFFE6E1E5)),
-        onAccent = cp(Color.White, Color(0xFF1B1B1F)),
+        bg = if (night) sys(android.R.color.system_neutral1_900, 0xFF1C1B1F)
+        else sys(android.R.color.system_neutral1_50, 0xFFF7F7F2),
+        bgAlpha = (ws.opacity.coerceIn(0, 100) * 255) / 100,
+        text = if (night) 0xFFE6E1E5.toInt() else 0xFF1B1B1F.toInt(),
+        muted = if (night) 0xFFB0ADB3.toInt() else 0xFF5F5E62.toInt(),
+        accent = accent,
+        needed = needed,
+        chipBg = if (night) sys(android.R.color.system_accent2_700, 0xFF3F4A3F)
+        else sys(android.R.color.system_accent2_100, 0xFFDDE5DB),
+        chipText = if (night) 0xFFE6E1E5.toInt() else 0xFF1B1B1F.toInt(),
+        onAccent = if (night) 0xFF1B1B1F.toInt() else 0xFFFFFFFF.toInt(),
     )
 }
 
-@Composable
-private fun WidgetBody(
-    s: ListState,
-    onlyNeeded: Boolean,
-    configured: Boolean,
-    error: String?,
-    p: Palette,
-    ws: WidgetSettings,
-    tab: Int,
-    widthDp: Float,
-) {
-    val pad = if (ws.compact) 6.dp else 10.dp
-    Column(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .background(p.background)
-            .cornerRadius(20.dp)
-            .padding(horizontal = pad, vertical = if (ws.compact) 4.dp else 8.dp)
-    ) {
-        Header(s.neededCount, onlyNeeded, p, ws)
-        if (error != null) {
-            Text(
-                text = error,
-                style = TextStyle(color = p.needed, fontSize = 12.sp),
-                modifier = GlanceModifier.padding(start = 4.dp, bottom = 4.dp),
-            )
-        }
-        if (!configured) {
-            Text(
-                text = "Нажмите, чтобы подключить список",
-                style = TextStyle(color = p.text, fontSize = ws.textSize.sp),
-                modifier = GlanceModifier.fillMaxWidth().padding(12.dp)
-                    .clickable(actionStartActivity<MainActivity>()),
-            )
-        } else {
-            if (ws.tabs) TabsBar(s.tabs(), tab, p, ws, widthDp - pad.value * 2 - 4f)
-            val groups = visibleGroups(s, onlyNeeded, ws, if (ws.tabs) tab else TAB_ALL)
-            if (groups.isEmpty()) {
-                Text(
-                    text = if (onlyNeeded) "Всё есть дома 👍" else "Список пуст — нажмите +",
-                    style = TextStyle(color = p.muted, fontSize = ws.textSize.sp),
-                    modifier = GlanceModifier.fillMaxWidth().padding(12.dp),
-                )
-            } else {
-                LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                    groups.forEach { g ->
-                        if (ws.showCategories && (!ws.tabs || tab == TAB_ALL)) {
-                            item(itemId = 1_000_000_000L + (g.category?.id ?: 0)) {
-                                CategoryHeader(g.category?.name ?: "Без категории", p, ws)
-                            }
-                        }
-                        if (ws.columns == 2) {
-                            items(g.items.chunked(2), itemId = { it.first().id.toLong() }) { pair ->
-                                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                                    pair.forEach { item ->
-                                        Box(modifier = GlanceModifier.defaultWeight()) { ItemRow(item, p, ws) }
-                                    }
-                                    if (pair.size == 1) Spacer(GlanceModifier.defaultWeight())
-                                }
-                            }
-                        } else {
-                            items(g.items, itemId = { it.id.toLong() }) { item -> ItemRow(item, p, ws) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+private fun bold(text: String): CharSequence =
+    SpannableString(text).apply { setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
 
-private fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings, tab: Int): List<Group> {
+/** Какие группы показывать с учётом вкладки и фильтра. Порядок товаров — по алфавиту (без прыжков). */
+internal fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings, tab: Int): List<Group> {
     fun sort(list: List<Item>) = if (ws.neededFirst) list.sortedBy { it.inStock } else list
     if (tab != TAB_ALL) {
         val list = s.itemsForTab(tab).filter { !onlyNeeded || !it.inStock }.sortedBy { it.name.lowercase() }
@@ -253,166 +109,287 @@ private fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings,
     }
 }
 
-/** Вкладки категорий. Glance не умеет прокручивать вбок, поэтому переносим их по строкам. */
-@Composable
-private fun TabsBar(tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings, available: Float) {
-    val fontSp = if (ws.compact) 12 else 13
-    fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
-    val rows = mutableListOf<MutableList<CategoryTab>>()
-    var used = 0f
-    for (t in tabs) {
-        // Примерная ширина: ~0.6 ширины шрифта на символ + отступы чипа и промежуток.
-        val w = label(t).length * fontSp * 0.6f + 18f + 6f
-        if (rows.isEmpty() || used + w > available) {
-            rows += mutableListOf(t)
-            used = w
-        } else {
-            rows.last() += t
-            used += w
+object WidgetRenderer {
+
+    private fun component(ctx: Context) = ComponentName(ctx, ListWidgetReceiver::class.java)
+
+    fun renderAll(context: Context) {
+        val ctx = context.applicationContext
+        Repo.init(ctx)
+        val mgr = AppWidgetManager.getInstance(ctx)
+        val ids = mgr.getAppWidgetIds(component(ctx))
+        if (ids.isEmpty()) return
+        ids.forEach { id -> render(ctx, mgr, id) }
+        @Suppress("DEPRECATION")
+        mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+    }
+
+    fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int) {
+        try {
+            mgr.updateAppWidget(appWidgetId, build(ctx, mgr, appWidgetId))
+        } catch (e: Exception) {
+            Diag.record(ctx, "widget render", e)
         }
     }
-    Column(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 2.dp)) {
-        rows.forEach { row ->
-            Row(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                row.forEach { t ->
-                    val isSel = t.id == selected
-                    Text(
-                        text = label(t),
-                        maxLines = 1,
-                        style = TextStyle(
-                            color = if (isSel) p.onAccent else p.chipText,
-                            fontSize = fontSp.sp,
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                        ),
-                        modifier = GlanceModifier
-                            .background(if (isSel) p.accent else p.chipBg)
-                            .cornerRadius(12.dp)
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
-                            .clickable(actionRunCallback<SelectTabAction>(actionParametersOf(TabKey to t.id))),
-                    )
-                    Spacer(GlanceModifier.width(6.dp))
-                }
+
+    private fun broadcast(ctx: Context, action: String, requestCode: Int, extras: Intent.() -> Unit = {}): PendingIntent {
+        val intent = Intent(ctx, ListWidgetReceiver::class.java).setAction(action).apply(extras)
+        return PendingIntent.getBroadcast(
+            ctx, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun activity(ctx: Context, cls: Class<*>, requestCode: Int): PendingIntent {
+        val intent = Intent(ctx, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        return PendingIntent.getActivity(
+            ctx, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun build(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int): RemoteViews {
+        val s = Repo.state.value
+        val ws = Repo.widgetSettings.value
+        val only = Repo.onlyNeeded.value
+        val configured = Repo.isConfigured
+        val tab = s.validTab(Repo.selectedTab.value)
+        val p = palette(ctx, ws)
+        val rv = RemoteViews(ctx.packageName, R.layout.widget_root)
+
+        // Фон и прозрачность
+        rv.setInt(R.id.bg, "setColorFilter", p.bg)
+        rv.setInt(R.id.bg, "setImageAlpha", p.bgAlpha)
+        val pad = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, if (ws.compact) 6f else 10f, ctx.resources.displayMetrics,
+        ).toInt()
+        rv.setViewPadding(R.id.content, pad, pad / 2 + 2, pad, pad / 2 + 2)
+
+        // Заголовок
+        rv.setViewVisibility(R.id.title, if (ws.showTitle) View.VISIBLE else View.INVISIBLE)
+        rv.setTextColor(R.id.title, p.text)
+        rv.setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, (ws.textSize + 2).toFloat())
+        rv.setOnClickPendingIntent(R.id.title, activity(ctx, MainActivity::class.java, 10))
+
+        rv.setTextViewText(R.id.chip_text, if (only) "Купить: ${s.neededCount}" else "Все · купить ${s.neededCount}")
+        rv.setTextColor(R.id.chip_text, p.chipText)
+        rv.setInt(R.id.chip_bg, "setColorFilter", p.chipBg)
+        rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
+
+        rv.setInt(R.id.btn_refresh, "setColorFilter", p.text)
+        rv.setInt(R.id.btn_add, "setColorFilter", p.text)
+        rv.setOnClickPendingIntent(R.id.btn_refresh, broadcast(ctx, ACTION_REFRESH, 21))
+        rv.setOnClickPendingIntent(R.id.btn_add, activity(ctx, AddItemActivity::class.java, 11))
+
+        // Строка ошибки (например, «Нет связи — отправлю позже»)
+        val error = Repo.lastError.value
+        if (error != null && configured) {
+            rv.setViewVisibility(R.id.error, View.VISIBLE)
+            rv.setTextViewText(R.id.error, error)
+            rv.setTextColor(R.id.error, p.needed)
+        } else {
+            rv.setViewVisibility(R.id.error, View.GONE)
+        }
+
+        // Вкладки категорий (переносятся по строкам)
+        rv.removeAllViews(R.id.tabs)
+        if (configured && ws.tabs) {
+            val opts: Bundle = mgr.getAppWidgetOptions(appWidgetId)
+            val widthDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
+            val available = widthDp - (if (ws.compact) 12 else 20) - 4
+            addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
+            rv.setViewVisibility(R.id.tabs, View.VISIBLE)
+        } else {
+            rv.setViewVisibility(R.id.tabs, View.GONE)
+        }
+
+        // Список товаров
+        val svc = Intent(ctx, ListWidgetService::class.java)
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
+        @Suppress("DEPRECATION")
+        rv.setRemoteAdapter(R.id.list, svc)
+        rv.setEmptyView(R.id.list, R.id.empty)
+        val template = PendingIntent.getBroadcast(
+            ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        rv.setPendingIntentTemplate(R.id.list, template)
+
+        val emptyText = when {
+            !configured -> "Нажмите, чтобы подключить список"
+            only -> "Всё есть дома 👍"
+            else -> "Список пуст — нажмите +"
+        }
+        rv.setTextViewText(R.id.empty, emptyText)
+        rv.setTextColor(R.id.empty, p.muted)
+        rv.setTextViewTextSize(R.id.empty, TypedValue.COMPLEX_UNIT_SP, ws.textSize.toFloat())
+        rv.setOnClickPendingIntent(R.id.empty, activity(ctx, MainActivity::class.java, 12))
+        return rv
+    }
+
+    private fun addTabs(
+        ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int,
+        p: Palette, ws: WidgetSettings, available: Float,
+    ) {
+        val fontSp = if (ws.compact) 12 else 13
+        fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
+        var row: RemoteViews? = null
+        var used = 0f
+        tabs.forEachIndexed { index, t ->
+            // Примерная ширина чипа: ~0.6 кегля на символ + внутренние отступы + промежуток.
+            val w = label(t).length * fontSp * 0.6f + 18f + 6f
+            if (row == null || used + w > available) {
+                row?.let { rv.addView(R.id.tabs, it) }
+                row = RemoteViews(ctx.packageName, R.layout.widget_tab_row)
+                used = 0f
+            }
+            used += w
+            val isSel = t.id == selected
+            val chip = RemoteViews(ctx.packageName, R.layout.widget_tab)
+            chip.setTextViewText(R.id.tab_text, if (isSel) bold(label(t)) else label(t))
+            chip.setTextColor(R.id.tab_text, if (isSel) p.onAccent else p.chipText)
+            chip.setTextViewTextSize(R.id.tab_text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
+            chip.setInt(R.id.tab_bg, "setColorFilter", if (isSel) p.accent else p.chipBg)
+            chip.setOnClickPendingIntent(R.id.tab_root, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
+            row!!.addView(R.id.tab_row, chip)
+        }
+        row?.let { rv.addView(R.id.tabs, it) }
+    }
+}
+
+class ListWidgetReceiver : AppWidgetProvider() {
+
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        WidgetRenderer.renderAll(context)
+        Sync.schedulePeriodic(context)
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
+        Repo.init(context)
+        WidgetRenderer.render(context, mgr, appWidgetId)
+    }
+
+    override fun onEnabled(context: Context) {
+        Sync.schedulePeriodic(context)
+        Sync.syncSoon(context)
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        val ctx = context.applicationContext
+        Repo.init(ctx)
+        when (intent.action) {
+            ACTION_TOGGLE -> {
+                val id = intent.getIntExtra(EXTRA_ITEM, -1)
+                if (id < 0) return
+                val current = Repo.state.value.items.firstOrNull { it.id == id } ?: return
+                runAsync(ctx, "toggle") { Repo.setInStock(ctx, id, !current.inStock) }
+            }
+            ACTION_TAB -> {
+                Repo.setSelectedTab(intent.getIntExtra(EXTRA_TAB, TAB_ALL))
+                WidgetRenderer.renderAll(ctx)
+            }
+            ACTION_FILTER -> {
+                Repo.setOnlyNeeded(!Repo.onlyNeeded.value)
+                WidgetRenderer.renderAll(ctx)
+            }
+            ACTION_REFRESH -> runAsync(ctx, "refresh") {
+                val ok = withTimeoutOrNull(9_000) { runCatching { Repo.refresh(ctx) }.isSuccess } == true
+                if (!ok) Sync.syncSoon(ctx)
+            }
+        }
+    }
+
+    private fun runAsync(ctx: Context, what: String, block: suspend () -> Unit) {
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                block()
+            } catch (e: Exception) {
+                Diag.record(ctx, "widget $what", e)
+            } finally {
+                pending.finish()
             }
         }
     }
 }
 
-@Composable
-private fun Header(needed: Int, onlyNeeded: Boolean, p: Palette, ws: WidgetSettings) {
-    Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(bottom = if (ws.compact) 0.dp else 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = if (ws.showTitle) "Покупки" else "",
-            style = TextStyle(color = p.text, fontSize = (ws.textSize + 2).sp, fontWeight = FontWeight.Bold),
-            modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>()),
-        )
-        // Переключатель: «все товары» / «только то, что нужно купить»
-        Text(
-            text = if (onlyNeeded) "Купить: $needed" else "Все · купить $needed",
-            style = TextStyle(color = p.chipText, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            modifier = GlanceModifier
-                .background(p.chipBg)
-                .cornerRadius(14.dp)
-                .padding(horizontal = 10.dp, vertical = 5.dp)
-                .clickable(actionRunCallback<FilterAction>()),
-        )
-        Spacer(GlanceModifier.width(4.dp))
-        IconBtn(R.drawable.ic_refresh, "Обновить", actionRunCallback<RefreshAction>(), p)
-        IconBtn(R.drawable.ic_add, "Добавить", actionStartActivity<AddItemActivity>(), p)
-    }
-}
+/** Отдаёт строки списка виджету: заголовки категорий и строки с 1–2 товарами. */
+class ListWidgetService : RemoteViewsService() {
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = Factory(applicationContext)
 
-@Composable
-private fun IconBtn(res: Int, description: String, action: Action, p: Palette) {
-    Image(
-        provider = ImageProvider(res),
-        contentDescription = description,
-        colorFilter = ColorFilter.tint(p.text),
-        modifier = GlanceModifier.size(38.dp).padding(7.dp).clickable(action),
-    )
-}
+    private class Row(val header: String?, val items: List<Item>)
 
-@Composable
-private fun CategoryHeader(name: String, p: Palette, ws: WidgetSettings) {
-    Text(
-        text = name.uppercase(),
-        style = TextStyle(color = p.accent, fontSize = (ws.textSize - 4).coerceAtLeast(10).sp, fontWeight = FontWeight.Bold),
-        modifier = GlanceModifier.fillMaxWidth()
-            .padding(start = 4.dp, top = if (ws.compact) 4.dp else 8.dp, bottom = 2.dp),
-    )
-}
+    private class Factory(private val ctx: Context) : RemoteViewsFactory {
+        private var rows: List<Row> = emptyList()
+        private var ws = WidgetSettings()
+        private var p: Palette? = null
 
-@Composable
-private fun ItemRow(item: Item, p: Palette, ws: WidgetSettings) {
-    CheckBox(
-        checked = item.inStock,
-        onCheckedChange = actionRunCallback<ToggleAction>(actionParametersOf(ItemIdKey to item.id)),
-        text = item.name,
-        style = TextStyle(
-            // Без галочки = нужно купить: выделяем цветом и жирным.
-            color = if (item.inStock) p.text else p.needed,
-            fontSize = ws.textSize.sp,
-            fontWeight = if (item.inStock) FontWeight.Normal else FontWeight.Bold,
-        ),
-        colors = CheckboxDefaults.colors(checkedColor = p.accent, uncheckedColor = p.needed),
-        maxLines = 1,
-        modifier = GlanceModifier.fillMaxWidth(),
-    )
-}
+        override fun onCreate() {}
 
-class ToggleAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        try {
-            Repo.init(context)
-            val id = parameters[ItemIdKey] ?: return
-            val newValue = parameters[ToggleableStateKey]
-                ?: !(Repo.state.value.items.firstOrNull { it.id == id }?.inStock ?: return)
-            Repo.setInStock(context, id, newValue)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Diag.record(context, "ToggleAction", e)
+        override fun onDataSetChanged() {
+            try {
+                Repo.init(ctx)
+                val s = Repo.state.value
+                ws = Repo.widgetSettings.value
+                p = palette(ctx, ws)
+                if (!Repo.isConfigured) { rows = emptyList(); return }
+                val tab = s.validTab(Repo.selectedTab.value)
+                val effectiveTab = if (ws.tabs) tab else TAB_ALL
+                val groups = visibleGroups(s, Repo.onlyNeeded.value, ws, effectiveTab)
+                val showHeaders = ws.showCategories && effectiveTab == TAB_ALL
+                val result = mutableListOf<Row>()
+                for (g in groups) {
+                    if (showHeaders) result += Row(g.category?.name ?: "Без категории", emptyList())
+                    g.items.chunked(if (ws.columns == 2) 2 else 1).forEach { result += Row(null, it) }
+                }
+                rows = result
+            } catch (e: Exception) {
+                Diag.record(ctx, "widget list", e)
+                rows = emptyList()
+            }
         }
-    }
-}
 
-class SelectTabAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        try {
-            Repo.init(context)
-            val tab = parameters[TabKey] ?: return
-            Repo.setSelectedTab(tab)
-            ListWidget().updateAll(context)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Diag.record(context, "SelectTabAction", e)
+        override fun onDestroy() {}
+        override fun getCount(): Int = rows.size
+        override fun getLoadingView(): RemoteViews? = null
+        override fun getViewTypeCount(): Int = 3
+        override fun getItemId(position: Int): Long = position.toLong()
+        override fun hasStableIds(): Boolean = false
+
+        override fun getViewAt(position: Int): RemoteViews {
+            val pal = p ?: palette(ctx, ws)
+            val row = rows.getOrNull(position)
+                ?: return RemoteViews(ctx.packageName, R.layout.widget_header)
+            if (row.header != null) {
+                val rv = RemoteViews(ctx.packageName, R.layout.widget_header)
+                rv.setTextViewText(R.id.header_text, row.header.uppercase())
+                rv.setTextColor(R.id.header_text, pal.accent)
+                rv.setTextViewTextSize(R.id.header_text, TypedValue.COMPLEX_UNIT_SP, (ws.textSize - 4).coerceAtLeast(10).toFloat())
+                return rv
+            }
+            val two = ws.columns == 2
+            val rv = RemoteViews(ctx.packageName, if (two) R.layout.widget_item2 else R.layout.widget_item1)
+            fillCell(rv, row.items.getOrNull(0), R.id.cell1, R.id.box1, R.id.name1, pal)
+            if (two) fillCell(rv, row.items.getOrNull(1), R.id.cell2, R.id.box2, R.id.name2, pal)
+            return rv
         }
-    }
-}
 
-class FilterAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        try {
-            Repo.init(context)
-            Repo.setOnlyNeeded(!Repo.onlyNeeded.value)
-            ListWidget().updateAll(context)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Diag.record(context, "FilterAction", e)
-        }
-    }
-}
-
-class RefreshAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        try {
-            Repo.init(context)
-            val ok = withTimeoutOrNull(9_000) { runCatching { Repo.refresh(context) }.isSuccess } == true
-            if (!ok) Sync.syncSoon(context)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Diag.record(context, "RefreshAction", e)
+        private fun fillCell(rv: RemoteViews, item: Item?, cell: Int, box: Int, name: Int, pal: Palette) {
+            if (item == null) {
+                rv.setViewVisibility(cell, View.INVISIBLE)
+                return
+            }
+            rv.setViewVisibility(cell, View.VISIBLE)
+            rv.setImageViewResource(box, if (item.inStock) R.drawable.ic_box_checked else R.drawable.ic_box_unchecked)
+            rv.setInt(box, "setColorFilter", if (item.inStock) pal.accent else pal.needed)
+            // Без галочки = нужно купить: цветом и жирным, но на том же месте в списке.
+            rv.setTextViewText(name, if (item.inStock) item.name else bold(item.name))
+            rv.setTextColor(name, if (item.inStock) pal.text else pal.needed)
+            rv.setTextViewTextSize(name, TypedValue.COMPLEX_UNIT_SP, ws.textSize.toFloat())
+            val pad = if (ws.compact) 3 else 6
+            val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, pad.toFloat(), ctx.resources.displayMetrics).toInt()
+            rv.setViewPadding(cell, px / 2, px, px, px)
+            rv.setOnClickFillInIntent(cell, Intent().putExtra(EXTRA_ITEM, item.id))
         }
     }
 }

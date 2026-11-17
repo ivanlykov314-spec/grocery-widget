@@ -34,6 +34,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -207,6 +209,7 @@ private fun ListScreen(onDisconnect: () -> Unit) {
     LaunchedEffect(Unit) { refresh() }
 
     val currentTab by Repo.selectedTab.collectAsState()
+    var onlyNeededApp by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     if (settingsOpen) {
         SettingsScreen(onBack = { settingsOpen = false })
@@ -253,10 +256,10 @@ private fun ListScreen(onDisconnect: () -> Unit) {
         val tabs = s.tabs()
         val selectedTab = s.validTab(currentTab)
         val groups = if (selectedTab == TAB_ALL) {
-            s.groups(onlyNeeded = false, includeEmpty = true)
+            s.groups(onlyNeeded = onlyNeededApp, includeEmpty = !onlyNeededApp)
         } else {
             val cat = s.categories.firstOrNull { it.id == selectedTab }
-            listOf(Group(cat, s.itemsForTab(selectedTab)))
+            listOf(Group(cat, s.itemsForTab(selectedTab).filter { !onlyNeededApp || !it.inStock }))
         }
         Column(Modifier.fillMaxSize().padding(pad)) {
         if (tabs.size > 1) {
@@ -273,6 +276,13 @@ private fun ListScreen(onDisconnect: () -> Unit) {
                 }
             }
         }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+            FilterChip(
+                selected = onlyNeededApp,
+                onClick = { onlyNeededApp = !onlyNeededApp },
+                label = { Text("Только нужно купить (${s.neededCount})") },
+            )
+        }
         if (!widgetPlaced) {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -288,7 +298,7 @@ private fun ListScreen(onDisconnect: () -> Unit) {
         }
         if (groups.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Добавьте первый товар кнопкой +")
+                Text(if (onlyNeededApp) "Всё есть дома 👍" else "Добавьте первый товар кнопкой +")
             }
         } else {
             LazyColumn(
