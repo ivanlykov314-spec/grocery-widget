@@ -15,6 +15,7 @@ import org.json.JSONObject
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        Diag.installCrashHandler(this)
         Repo.init(this)
         Push.init(this)
         Sync.schedulePeriodic(this)

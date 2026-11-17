@@ -1,6 +1,10 @@
 package com.family.grocery.widget
 
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
+import android.widget.RemoteViews
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -13,7 +17,6 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
@@ -23,7 +26,7 @@ import androidx.glance.appwidget.CheckBox
 import androidx.glance.appwidget.CheckboxDefaults
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.ToggleableStateKey
 import androidx.glance.appwidget.action.actionRunCallback
@@ -49,6 +52,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.family.grocery.CategoryTab
+import com.family.grocery.Diag
 import com.family.grocery.Group
 import com.family.grocery.Item
 import com.family.grocery.ListState
@@ -59,21 +63,50 @@ import com.family.grocery.TAB_ALL
 import com.family.grocery.WidgetSettings
 import com.family.grocery.ui.AddItemActivity
 import com.family.grocery.ui.MainActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 class ListWidget : GlanceAppWidget() {
-    // Exact: знаем реальную ширину виджета, чтобы переносить вкладки по строкам.
-    override val sizeMode = SizeMode.Exact
+    /**
+     * Если отрисовка упала: запоминаем ошибку, при сбое на вкладке возвращаемся на «Все»,
+     * а на самом виджете показываем текст ошибки вместо вечной загрузки.
+     */
+    override fun onCompositionError(context: Context, glanceId: GlanceId, appWidgetId: Int, throwable: Throwable) {
+        Diag.record(context, "widget", throwable)
+        Repo.init(context)
+        if (Repo.selectedTab.value != TAB_ALL) {
+            Repo.setSelectedTab(TAB_ALL)
+            CoroutineScope(Dispatchers.Default).launch { runCatching { ListWidget().updateAll(context) } }
+        }
+        val rv = RemoteViews(context.packageName, R.layout.widget_error)
+        rv.setTextViewText(
+            R.id.error_text,
+            "Ошибка виджета:\n${throwable.javaClass.simpleName}: ${throwable.message.orEmpty()}\n\n" +
+                "Нажмите, чтобы открыть приложение. Подробности: ⋮ → Настройки виджета → в самом низу.",
+        )
+        val open = PendingIntent.getActivity(
+            context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        rv.setOnClickPendingIntent(R.id.error_root, open)
+        runCatching { AppWidgetManager.getInstance(context).updateAppWidget(appWidgetId, rv) }
+    }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         Repo.init(context)
+        // Ширина виджета нужна, чтобы переносить вкладки по строкам.
+        val widthDp = runCatching {
+            GlanceAppWidgetManager(context).getAppWidgetSizes(id).maxOfOrNull { it.width.value }
+        }.getOrNull() ?: 250f
         provideContent {
             val s by Repo.state.collectAsState()
             val only by Repo.onlyNeeded.collectAsState()
             val error by Repo.lastError.collectAsState()
             val settings by Repo.widgetSettings.collectAsState()
             val tab by Repo.selectedTab.collectAsState()
-            WidgetBody(s, only, Repo.isConfigured, error, palette(context, settings), settings, s.validTab(tab))
+            WidgetBody(s, only, Repo.isConfigured, error, palette(context, settings), settings, s.validTab(tab), widthDp)
         }
     }
 }
@@ -145,6 +178,7 @@ private fun WidgetBody(
     p: Palette,
     ws: WidgetSettings,
     tab: Int,
+    widthDp: Float,
 ) {
     val pad = if (ws.compact) 6.dp else 10.dp
     Column(
@@ -170,7 +204,7 @@ private fun WidgetBody(
                     .clickable(actionStartActivity<MainActivity>()),
             )
         } else {
-            if (ws.tabs) TabsBar(s.tabs(), tab, p, ws, pad.value)
+            if (ws.tabs) TabsBar(s.tabs(), tab, p, ws, widthDp - pad.value * 2 - 4f)
             val groups = visibleGroups(s, onlyNeeded, ws, if (ws.tabs) tab else TAB_ALL)
             if (groups.isEmpty()) {
                 Text(
@@ -221,9 +255,8 @@ private fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings,
 
 /** Вкладки категорий. Glance не умеет прокручивать вбок, поэтому переносим их по строкам. */
 @Composable
-private fun TabsBar(tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings, padDp: Float) {
+private fun TabsBar(tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings, available: Float) {
     val fontSp = if (ws.compact) 12 else 13
-    val available = LocalSize.current.width.value - padDp * 2 - 4f
     fun label(t: CategoryTab) = if (t.needed > 0) "${t.name} ${t.needed}" else t.name
     val rows = mutableListOf<MutableList<CategoryTab>>()
     var used = 0f
@@ -331,35 +364,55 @@ private fun ItemRow(item: Item, p: Palette, ws: WidgetSettings) {
 
 class ToggleAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Repo.init(context)
-        val id = parameters[ItemIdKey] ?: return
-        val newValue = parameters[ToggleableStateKey]
-            ?: !(Repo.state.value.items.firstOrNull { it.id == id }?.inStock ?: return)
-        Repo.setInStock(context, id, newValue)
+        try {
+            Repo.init(context)
+            val id = parameters[ItemIdKey] ?: return
+            val newValue = parameters[ToggleableStateKey]
+                ?: !(Repo.state.value.items.firstOrNull { it.id == id }?.inStock ?: return)
+            Repo.setInStock(context, id, newValue)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Diag.record(context, "ToggleAction", e)
+        }
     }
 }
 
 class SelectTabAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Repo.init(context)
-        val tab = parameters[TabKey] ?: return
-        Repo.setSelectedTab(tab)
-        ListWidget().updateAll(context)
+        try {
+            Repo.init(context)
+            val tab = parameters[TabKey] ?: return
+            Repo.setSelectedTab(tab)
+            ListWidget().updateAll(context)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Diag.record(context, "SelectTabAction", e)
+        }
     }
 }
 
 class FilterAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Repo.init(context)
-        Repo.setOnlyNeeded(!Repo.onlyNeeded.value)
-        ListWidget().updateAll(context)
+        try {
+            Repo.init(context)
+            Repo.setOnlyNeeded(!Repo.onlyNeeded.value)
+            ListWidget().updateAll(context)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Diag.record(context, "FilterAction", e)
+        }
     }
 }
 
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Repo.init(context)
-        val ok = withTimeoutOrNull(9_000) { runCatching { Repo.refresh(context) }.isSuccess } == true
-        if (!ok) Sync.syncSoon(context)
+        try {
+            Repo.init(context)
+            val ok = withTimeoutOrNull(9_000) { runCatching { Repo.refresh(context) }.isSuccess } == true
+            if (!ok) Sync.syncSoon(context)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Diag.record(context, "RefreshAction", e)
+        }
     }
 }

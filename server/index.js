@@ -95,11 +95,33 @@ app.use((req, _res, next) => {
 
 app.get('/', (_req, res) => res.send('Grocery widget server OK'));
 
+// Railway стоит за прокси: реальный IP клиента — в X-Forwarded-For.
+app.set('trust proxy', true);
+
+// Защита от подбора ключа: после 10 неверных попыток с одного IP — пауза 15 минут.
+const MAX_FAILS = 10;
+const BLOCK_MS = 15 * 60 * 1000;
+const fails = new Map(); // ip -> { count, until }
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, f] of fails) if (f.until < now) fails.delete(ip);
+}, 60 * 1000).unref();
+
 app.use('/api', (req, res, next) => {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const f = fails.get(ip);
+  if (f && f.until > now && f.count >= MAX_FAILS) {
+    return res.status(429).json({ error: 'Слишком много попыток. Подождите 15 минут.' });
+  }
   const key = req.get('X-Family-Key') || '';
   const a = Buffer.from(key);
   const b = Buffer.from(FAMILY_KEY);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    const cur = f && f.until > now ? f : { count: 0, until: 0 };
+    cur.count += 1;
+    cur.until = now + BLOCK_MS;
+    fails.set(ip, cur);
     return res.status(401).json({ error: 'Неверный ключ' });
   }
   next();
