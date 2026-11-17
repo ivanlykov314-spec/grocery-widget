@@ -233,6 +233,11 @@ object Repo {
     /** Комментарий к товару («10 штук»). Пустая строка — убрать комментарий. */
     suspend fun setNote(context: Context, id: Int, note: String) {
         mutate(context, "PATCH", "/api/items/$id", JSONObject().put("note", note.trim()))
+        // Старый сервер молча игнорирует поле note — сообщим об этом явно.
+        val saved = state.value.items.firstOrNull { it.id == id }?.note
+        if (saved != null && saved != note.trim().replace(Regex("\\s+"), " ")) {
+            throw IllegalStateException("Сервер не сохранил комментарий: обновите сервер на Railway (Deployments → Redeploy)")
+        }
     }
 
     suspend fun deleteItem(context: Context, id: Int) {
