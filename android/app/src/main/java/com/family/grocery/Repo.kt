@@ -144,10 +144,13 @@ object Repo {
         synchronized(this) { pending[itemId] = value; savePending() }
         publish()
         updateWidgets(context)
+        val before = state.value
+        val hadError = lastError.value != null
         val ok = withTimeoutOrNull(8_000) { runCatching { flushPending() }.isSuccess } == true
         if (ok) {
             lastError.value = null
-            updateWidgets(context)
+            // Второй раз перерисовываем, только если что-то реально изменилось (лишние перерисовки = мелькание).
+            if (hadError || state.value != before) updateWidgets(context)
         } else {
             lastError.value = "Нет связи — отправлю позже"
             Sync.syncSoon(context)

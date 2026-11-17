@@ -116,21 +116,39 @@ object WidgetRenderer {
 
     private fun component(ctx: Context) = ComponentName(ctx, ListWidgetReceiver::class.java)
 
+    /** Следующая отрисовка будет полной (система попросила обновить виджет — например, после перезапуска лаунчера). */
+    fun forceFull() = fullyRendered.clear()
+
     fun renderAll(context: Context) {
         val ctx = context.applicationContext
         Repo.init(ctx)
         val mgr = AppWidgetManager.getInstance(ctx)
         val ids = mgr.getAppWidgetIds(component(ctx))
         if (ids.isEmpty()) return
-        ids.forEach { id -> render(ctx, mgr, id) }
+        ids.forEach { id -> render(ctx, mgr, id, full = id !in fullyRendered) }
         @Suppress("DEPRECATION")
         mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
     }
 
-    fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int) {
+    /** Виджеты, которые в этом процессе уже получили полное обновление (со списком). */
+    private val fullyRendered = java.util.Collections.synchronizedSet(mutableSetOf<Int>())
+
+    /**
+     * Полное обновление пересоздаёт список (он на миг мелькает «загрузкой»), поэтому делаем его
+     * один раз, а дальше — частичное: только заголовок, вкладки и цвета; список обновляет notify.
+     * Вкладки-чипы добавляются через addView — для них всегда полное обновление.
+     */
+    fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int, full: Boolean = true) {
         try {
-            mgr.updateAppWidget(appWidgetId, build(ctx, mgr, appWidgetId))
-            Diag.event(ctx, "отрисован виджет $appWidgetId")
+            val ws = Repo.widgetSettings.value
+            val needFull = full || (ws.tabs && ws.tabStyle == "chips")
+            val rv = build(ctx, mgr, appWidgetId, withList = needFull)
+            if (needFull) {
+                mgr.updateAppWidget(appWidgetId, rv)
+                fullyRendered += appWidgetId
+            } else {
+                mgr.partiallyUpdateAppWidget(appWidgetId, rv)
+            }
         } catch (e: Exception) {
             Diag.record(ctx, "widget render", e)
         }
@@ -150,7 +168,7 @@ object WidgetRenderer {
         )
     }
 
-    private fun build(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int): RemoteViews {
+    private fun build(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int, withList: Boolean): RemoteViews {
         val s = Repo.state.value
         val ws = Repo.widgetSettings.value
         val only = Repo.onlyNeeded.value
@@ -169,8 +187,7 @@ object WidgetRenderer {
 
         // Заголовок
         rv.setViewVisibility(R.id.title, if (ws.showTitle) View.VISIBLE else View.INVISIBLE)
-        // ВРЕМЕННО: время отрисовки в заголовке — видно, доходят ли обновления до экрана.
-        rv.setTextViewText(R.id.title, "Покупки " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
+        rv.setTextViewText(R.id.title, "Покупки")
         rv.setTextColor(R.id.title, p.text)
         rv.setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, (ws.textSize + 2).toFloat())
         rv.setOnClickPendingIntent(R.id.title, activity(ctx, MainActivity::class.java, 10))
@@ -218,17 +235,19 @@ object WidgetRenderer {
         // Строки списка отдаёт сервис (ListWidgetService). НЕ встраивать их в само обновление:
         // при сотнях товаров посылка превышает лимит Binder, система считает лаунчер «мёртвым»
         // и перестаёт доставлять ему ВСЕ обновления виджета до перезапуска лаунчера/телефона.
-        val svc = Intent(ctx, ListWidgetService::class.java)
-            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-        svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
-        @Suppress("DEPRECATION")
-        rv.setRemoteAdapter(R.id.list, svc)
-        rv.setEmptyView(R.id.list, R.id.empty)
-        val template = PendingIntent.getBroadcast(
-            ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-        )
-        rv.setPendingIntentTemplate(R.id.list, template)
+        if (withList) {
+            val svc = Intent(ctx, ListWidgetService::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
+            @Suppress("DEPRECATION")
+            rv.setRemoteAdapter(R.id.list, svc)
+            rv.setEmptyView(R.id.list, R.id.empty)
+            val template = PendingIntent.getBroadcast(
+                ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+            )
+            rv.setPendingIntentTemplate(R.id.list, template)
+        }
 
         val emptyText = when {
             !configured -> "Нажмите, чтобы подключить список"
@@ -304,6 +323,7 @@ object WidgetRenderer {
 class ListWidgetReceiver : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        WidgetRenderer.forceFull()
         WidgetRenderer.renderAll(context)
         Sync.schedulePeriodic(context)
     }
@@ -435,7 +455,6 @@ class ListWidgetService : RemoteViewsService() {
         override fun onCreate() {}
         override fun onDataSetChanged() {
             data = WidgetRows.build(ctx)
-            Diag.event(ctx, "список (сервис): ${data?.rows?.size} строк")
         }
         override fun onDestroy() {}
         override fun getCount(): Int = data?.rows?.size ?: 0
