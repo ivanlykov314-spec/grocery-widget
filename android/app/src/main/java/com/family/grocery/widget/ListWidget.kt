@@ -114,8 +114,6 @@ internal fun visibleGroups(s: ListState, onlyNeeded: Boolean, ws: WidgetSettings
 
 object WidgetRenderer {
 
-    @Volatile private var flip = false
-
     private fun component(ctx: Context) = ComponentName(ctx, ListWidgetReceiver::class.java)
 
     fun renderAll(context: Context) {
@@ -125,10 +123,8 @@ object WidgetRenderer {
         val ids = mgr.getAppWidgetIds(component(ctx))
         if (ids.isEmpty()) return
         ids.forEach { id -> render(ctx, mgr, id) }
-        if (Build.VERSION.SDK_INT < 31) {
-            @Suppress("DEPRECATION")
-            mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
-        }
+        @Suppress("DEPRECATION")
+        mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
     }
 
     fun render(ctx: Context, mgr: AppWidgetManager, appWidgetId: Int) {
@@ -161,9 +157,7 @@ object WidgetRenderer {
         val configured = Repo.isConfigured
         val tab = s.validTab(Repo.selectedTab.value)
         val p = palette(ctx, ws)
-        // Чередуем два одинаковых макета: лаунчер тогда каждый раз создаёт вид заново.
-        flip = !flip
-        val rv = RemoteViews(ctx.packageName, if (flip) R.layout.widget_root else R.layout.widget_root_b)
+        val rv = RemoteViews(ctx.packageName, R.layout.widget_root)
 
         // Фон и прозрачность
         rv.setInt(R.id.bg, "setColorFilter", p.bg)
@@ -221,20 +215,14 @@ object WidgetRenderer {
         }
 
         // Список товаров
-        if (Build.VERSION.SDK_INT >= 31) {
-            // Android 12+: строки списка передаются прямо внутри обновления, без сервиса.
-            val rows = WidgetRows.build(ctx)
-            val b = RemoteViews.RemoteCollectionItems.Builder().setViewTypeCount(3).setHasStableIds(false)
-            rows.rows.forEachIndexed { i, row -> b.addItem(i.toLong(), WidgetRows.view(ctx, row, rows.ws, rows.pal)) }
-            rv.setRemoteAdapter(R.id.list, b.build())
-            Diag.event(ctx, "список (встроенный): ${rows.rows.size} строк")
-        } else {
-            val svc = Intent(ctx, ListWidgetService::class.java)
-                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
-            @Suppress("DEPRECATION")
-            rv.setRemoteAdapter(R.id.list, svc)
-        }
+        // Строки списка отдаёт сервис (ListWidgetService). НЕ встраивать их в само обновление:
+        // при сотнях товаров посылка превышает лимит Binder, система считает лаунчер «мёртвым»
+        // и перестаёт доставлять ему ВСЕ обновления виджета до перезапуска лаунчера/телефона.
+        val svc = Intent(ctx, ListWidgetService::class.java)
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
+        @Suppress("DEPRECATION")
+        rv.setRemoteAdapter(R.id.list, svc)
         rv.setEmptyView(R.id.list, R.id.empty)
         val template = PendingIntent.getBroadcast(
             ctx, 30, Intent(ctx, ListWidgetReceiver::class.java).setAction(ACTION_TOGGLE),
@@ -322,7 +310,10 @@ class ListWidgetReceiver : AppWidgetProvider() {
 
     override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
         Repo.init(context)
-        WidgetRenderer.render(context, mgr, appWidgetId)
+        // Размер важен только для вкладок-чипов. Иначе не перерисовываем: лаунчер шлёт это событие
+        // после каждой отрисовки, и получалась частая серия лишних обновлений.
+        val ws = Repo.widgetSettings.value
+        if (ws.tabs && ws.tabStyle == "chips") WidgetRenderer.render(context, mgr, appWidgetId)
     }
 
     override fun onEnabled(context: Context) {
@@ -434,7 +425,7 @@ internal object WidgetRows {
     }
 }
 
-/** Список через сервис — только для Android 11 и ниже. */
+/** Отдаёт строки списка виджету. */
 class ListWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = Factory(applicationContext)
 
