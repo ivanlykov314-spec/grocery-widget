@@ -15,19 +15,33 @@
         android:padding="6dp"
         android:src="@drawable/ic_chevron_left" />
 
-    <TextView
-        android:id="@+id/tab_current"
+    <FrameLayout
+        android:id="@+id/tab_current_root"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:background="@drawable/chip_sel_light"
-        android:ellipsize="end"
-        android:gravity="center"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:singleLine="true"
-        android:textSize="15sp"
-        android:textStyle="bold" />
+        android:layout_weight="1">
+
+        <ImageView
+            android:id="@+id/tab_current_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY"
+            android:src="@drawable/chip_sel_light" />
+
+        <TextView
+            android:id="@+id/tab_current"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="6dp"
+            android:singleLine="true"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+    </FrameLayout>
 
     <ImageView
         android:id="@+id/tab_next"

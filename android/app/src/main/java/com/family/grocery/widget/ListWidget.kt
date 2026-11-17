@@ -177,8 +177,8 @@ object WidgetRenderer {
 
         rv.setTextViewText(R.id.chip_text, if (only) "Купить: ${s.neededCount}" else "Все · купить ${s.neededCount}")
         rv.setTextColor(R.id.chip_text, p.chipText)
-        rv.setInt(R.id.chip_text, "setBackgroundResource", chipBg(p, false))
-        rv.setOnClickPendingIntent(R.id.chip_text, broadcast(ctx, ACTION_FILTER, 20))
+        rv.setImageViewResource(R.id.chip_bg, chipBg(p, false))
+        rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
 
         rv.setInt(R.id.btn_refresh, "setColorFilter", p.text)
         rv.setInt(R.id.btn_add, "setColorFilter", p.text)
@@ -256,12 +256,12 @@ object WidgetRenderer {
         sw.setTextViewText(R.id.tab_current, label)
         sw.setTextColor(R.id.tab_current, selText(p))
         sw.setTextViewTextSize(R.id.tab_current, TypedValue.COMPLEX_UNIT_SP, (if (ws.compact) 14 else 15).toFloat())
-        sw.setInt(R.id.tab_current, "setBackgroundResource", chipBg(p, true))
+        sw.setImageViewResource(R.id.tab_current_bg, chipBg(p, true))
         sw.setInt(R.id.tab_prev, "setColorFilter", p.text)
         sw.setInt(R.id.tab_next, "setColorFilter", p.text)
         sw.setOnClickPendingIntent(R.id.tab_prev, broadcast(ctx, ACTION_TAB, 40) { putExtra(EXTRA_TAB, prev.id) })
         sw.setOnClickPendingIntent(R.id.tab_next, broadcast(ctx, ACTION_TAB, 41) { putExtra(EXTRA_TAB, next.id) })
-        sw.setOnClickPendingIntent(R.id.tab_current, activity(ctx, PickTabActivity::class.java, 42))
+        sw.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
         rv.addView(R.id.tabs, sw)
     }
 
@@ -287,8 +287,8 @@ object WidgetRenderer {
             chip.setTextViewText(R.id.tab_text, if (isSel) bold(label(t)) else label(t))
             chip.setTextColor(R.id.tab_text, if (isSel) selText(p) else p.chipText)
             chip.setTextViewTextSize(R.id.tab_text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
-            chip.setInt(R.id.tab_text, "setBackgroundResource", chipBg(p, isSel))
-            chip.setOnClickPendingIntent(R.id.tab_text, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
+            chip.setImageViewResource(R.id.tab_bg, chipBg(p, isSel))
+            chip.setOnClickPendingIntent(R.id.tab_root, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
             row!!.addView(R.id.tab_row, chip)
         }
         row?.let { rv.addView(R.id.tabs, it) }
