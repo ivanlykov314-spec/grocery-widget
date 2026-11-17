@@ -195,17 +195,23 @@ object WidgetRenderer {
             rv.setViewVisibility(R.id.error, View.GONE)
         }
 
-        // Вкладки категорий (переносятся по строкам)
-        rv.removeAllViews(R.id.tabs)
-        if (configured && ws.tabs) {
+        // Вкладки категорий
+        val showTabs = configured && ws.tabs && s.tabs().isNotEmpty()
+        if (showTabs && ws.tabStyle == "chips") {
+            rv.removeAllViews(R.id.tabs)
             val opts: Bundle = mgr.getAppWidgetOptions(appWidgetId)
             val widthDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
             val available = widthDp - (if (ws.compact) 12 else 20) - 4
-            if (ws.tabStyle == "chips") addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
-            else addTabSwitcher(ctx, rv, s.tabs(), tab, p, ws)
+            addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
             rv.setViewVisibility(R.id.tabs, View.VISIBLE)
         } else {
             rv.setViewVisibility(R.id.tabs, View.GONE)
+        }
+        if (showTabs && ws.tabStyle != "chips") {
+            fillTabSwitcher(ctx, rv, s.tabs(), tab, p, ws)
+            rv.setViewVisibility(R.id.tab_switch, View.VISIBLE)
+        } else {
+            rv.setViewVisibility(R.id.tab_switch, View.GONE)
         }
 
         // Список товаров
@@ -242,27 +248,24 @@ object WidgetRenderer {
 
     private fun selText(p: Palette): Int = if (p.night) 0xFF1B1B1F.toInt() else 0xFFFFFFFF.toInt()
 
-    /** Компактные вкладки: ‹ Категория ›, нажатие на название — список всех категорий. */
-    private fun addTabSwitcher(
+    /** Компактные вкладки: ‹ Категория ›, нажатие на название — список всех категорий. Элементы прямо в widget_root. */
+    private fun fillTabSwitcher(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings,
     ) {
-        if (tabs.isEmpty()) return
         val idx = tabs.indexOfFirst { it.id == selected }.coerceAtLeast(0)
         val cur = tabs[idx]
         val prev = tabs[(idx - 1 + tabs.size) % tabs.size]
         val next = tabs[(idx + 1) % tabs.size]
-        val sw = RemoteViews(ctx.packageName, R.layout.widget_tab_switch)
         val label = if (cur.needed > 0) "${cur.name} · купить ${cur.needed}" else cur.name
-        sw.setTextViewText(R.id.tab_current, label)
-        sw.setTextColor(R.id.tab_current, selText(p))
-        sw.setTextViewTextSize(R.id.tab_current, TypedValue.COMPLEX_UNIT_SP, (if (ws.compact) 14 else 15).toFloat())
-        sw.setImageViewResource(R.id.tab_current_bg, chipBg(p, true))
-        sw.setInt(R.id.tab_prev, "setColorFilter", p.text)
-        sw.setInt(R.id.tab_next, "setColorFilter", p.text)
-        sw.setOnClickPendingIntent(R.id.tab_prev, broadcast(ctx, ACTION_TAB, 40) { putExtra(EXTRA_TAB, prev.id) })
-        sw.setOnClickPendingIntent(R.id.tab_next, broadcast(ctx, ACTION_TAB, 41) { putExtra(EXTRA_TAB, next.id) })
-        sw.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
-        rv.addView(R.id.tabs, sw)
+        rv.setTextViewText(R.id.tab_current, label)
+        rv.setTextColor(R.id.tab_current, selText(p))
+        rv.setTextViewTextSize(R.id.tab_current, TypedValue.COMPLEX_UNIT_SP, (if (ws.compact) 14 else 15).toFloat())
+        rv.setImageViewResource(R.id.tab_current_bg, chipBg(p, true))
+        rv.setInt(R.id.tab_prev, "setColorFilter", p.text)
+        rv.setInt(R.id.tab_next, "setColorFilter", p.text)
+        rv.setOnClickPendingIntent(R.id.tab_prev, broadcast(ctx, ACTION_TAB, 40) { putExtra(EXTRA_TAB, prev.id) })
+        rv.setOnClickPendingIntent(R.id.tab_next, broadcast(ctx, ACTION_TAB, 41) { putExtra(EXTRA_TAB, next.id) })
+        rv.setOnClickPendingIntent(R.id.tab_current_root, activity(ctx, PickTabActivity::class.java, 42))
     }
 
     private fun addTabs(

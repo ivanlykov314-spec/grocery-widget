@@ -89,6 +89,14 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
+        <!-- Вкладки ‹ Категория › — прямо в макете, без addView (вложенные RemoteViews лаунчер может не применить) -->
+        <include
+            android:id="@+id/tab_switch"
+            layout="@layout/widget_tab_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/tabs"
             android:layout_width="match_parent"
