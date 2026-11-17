@@ -30,6 +30,7 @@ import com.family.grocery.TAB_ALL
 import com.family.grocery.WidgetSettings
 import com.family.grocery.ui.AddItemActivity
 import com.family.grocery.ui.MainActivity
+import com.family.grocery.ui.PickTabActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -49,6 +50,7 @@ private const val EXTRA_TAB = "tab"
 
 /** Цвета виджета (ARGB) с учётом темы и прозрачности. */
 private class Palette(
+    val night: Boolean,
     val bg: Int,
     val bgAlpha: Int,
     val text: Int,
@@ -77,6 +79,7 @@ private fun palette(ctx: Context, ws: WidgetSettings): Palette {
         else -> if (night) 0xFFFF8A80.toInt() else 0xFFC62828.toInt()
     }
     return Palette(
+        night = night,
         bg = if (night) sys(android.R.color.system_neutral1_900, 0xFF1C1B1F)
         else sys(android.R.color.system_neutral1_50, 0xFFF7F7F2),
         bgAlpha = (ws.opacity.coerceIn(0, 100) * 255) / 100,
@@ -171,8 +174,8 @@ object WidgetRenderer {
 
         rv.setTextViewText(R.id.chip_text, if (only) "Купить: ${s.neededCount}" else "Все · купить ${s.neededCount}")
         rv.setTextColor(R.id.chip_text, p.chipText)
-        rv.setInt(R.id.chip_bg, "setColorFilter", p.chipBg)
-        rv.setOnClickPendingIntent(R.id.chip, broadcast(ctx, ACTION_FILTER, 20))
+        rv.setInt(R.id.chip_text, "setBackgroundResource", chipBg(p, false))
+        rv.setOnClickPendingIntent(R.id.chip_text, broadcast(ctx, ACTION_FILTER, 20))
 
         rv.setInt(R.id.btn_refresh, "setColorFilter", p.text)
         rv.setInt(R.id.btn_add, "setColorFilter", p.text)
@@ -195,7 +198,8 @@ object WidgetRenderer {
             val opts: Bundle = mgr.getAppWidgetOptions(appWidgetId)
             val widthDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).takeIf { it > 0 } ?: 250
             val available = widthDp - (if (ws.compact) 12 else 20) - 4
-            addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
+            if (ws.tabStyle == "chips") addTabs(ctx, rv, s.tabs(), tab, p, ws, available.toFloat())
+            else addTabSwitcher(ctx, rv, s.tabs(), tab, p, ws)
             rv.setViewVisibility(R.id.tabs, View.VISIBLE)
         } else {
             rv.setViewVisibility(R.id.tabs, View.GONE)
@@ -226,6 +230,38 @@ object WidgetRenderer {
         return rv
     }
 
+    private fun chipBg(p: Palette, selected: Boolean): Int = when {
+        selected && p.night -> R.drawable.chip_sel_dark
+        selected -> R.drawable.chip_sel_light
+        p.night -> R.drawable.chip_dark
+        else -> R.drawable.chip_light
+    }
+
+    private fun selText(p: Palette): Int = if (p.night) 0xFF1B1B1F.toInt() else 0xFFFFFFFF.toInt()
+
+    /** Компактные вкладки: ‹ Категория ›, нажатие на название — список всех категорий. */
+    private fun addTabSwitcher(
+        ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int, p: Palette, ws: WidgetSettings,
+    ) {
+        if (tabs.isEmpty()) return
+        val idx = tabs.indexOfFirst { it.id == selected }.coerceAtLeast(0)
+        val cur = tabs[idx]
+        val prev = tabs[(idx - 1 + tabs.size) % tabs.size]
+        val next = tabs[(idx + 1) % tabs.size]
+        val sw = RemoteViews(ctx.packageName, R.layout.widget_tab_switch)
+        val label = if (cur.needed > 0) "${cur.name} · купить ${cur.needed}" else cur.name
+        sw.setTextViewText(R.id.tab_current, label)
+        sw.setTextColor(R.id.tab_current, selText(p))
+        sw.setTextViewTextSize(R.id.tab_current, TypedValue.COMPLEX_UNIT_SP, (if (ws.compact) 14 else 15).toFloat())
+        sw.setInt(R.id.tab_current, "setBackgroundResource", chipBg(p, true))
+        sw.setInt(R.id.tab_prev, "setColorFilter", p.text)
+        sw.setInt(R.id.tab_next, "setColorFilter", p.text)
+        sw.setOnClickPendingIntent(R.id.tab_prev, broadcast(ctx, ACTION_TAB, 40) { putExtra(EXTRA_TAB, prev.id) })
+        sw.setOnClickPendingIntent(R.id.tab_next, broadcast(ctx, ACTION_TAB, 41) { putExtra(EXTRA_TAB, next.id) })
+        sw.setOnClickPendingIntent(R.id.tab_current, activity(ctx, PickTabActivity::class.java, 42))
+        rv.addView(R.id.tabs, sw)
+    }
+
     private fun addTabs(
         ctx: Context, rv: RemoteViews, tabs: List<CategoryTab>, selected: Int,
         p: Palette, ws: WidgetSettings, available: Float,
@@ -246,10 +282,10 @@ object WidgetRenderer {
             val isSel = t.id == selected
             val chip = RemoteViews(ctx.packageName, R.layout.widget_tab)
             chip.setTextViewText(R.id.tab_text, if (isSel) bold(label(t)) else label(t))
-            chip.setTextColor(R.id.tab_text, if (isSel) p.onAccent else p.chipText)
+            chip.setTextColor(R.id.tab_text, if (isSel) selText(p) else p.chipText)
             chip.setTextViewTextSize(R.id.tab_text, TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat())
-            chip.setInt(R.id.tab_bg, "setColorFilter", if (isSel) p.accent else p.chipBg)
-            chip.setOnClickPendingIntent(R.id.tab_root, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
+            chip.setInt(R.id.tab_text, "setBackgroundResource", chipBg(p, isSel))
+            chip.setOnClickPendingIntent(R.id.tab_text, broadcast(ctx, ACTION_TAB, 1000 + index) { putExtra(EXTRA_TAB, t.id) })
             row!!.addView(R.id.tab_row, chip)
         }
         row?.let { rv.addView(R.id.tabs, it) }

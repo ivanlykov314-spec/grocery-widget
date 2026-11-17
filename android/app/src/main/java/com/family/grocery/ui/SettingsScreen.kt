@@ -137,6 +137,13 @@ fun SettingsScreen(onBack: () -> Unit) {
             SwitchRow("Категории вкладками", "Вкладки «Все», «Овощи», «Фрукты»… вверху виджета", ws.tabs) {
                 save(ws.copy(tabs = it))
             }
+            if (ws.tabs) {
+                Label("Вид вкладок")
+                Choice(
+                    listOf("arrows" to "‹ Одна строка ›", "chips" to "Все сразу"),
+                    ws.tabStyle,
+                ) { save(ws.copy(tabStyle = it)) }
+            }
             SwitchRow("Показывать категории", "На вкладке «Все»: если выключить — один общий список по алфавиту", ws.showCategories) {
                 save(ws.copy(showCategories = it))
             }

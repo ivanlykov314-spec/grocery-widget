@@ -30,6 +30,14 @@
             android:theme="@style/Theme.Grocery.Transparent"
             android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
 
+        <!-- Выбор категории из виджета (нажатие на название вкладки) -->
+        <activity
+            android:name=".ui.PickTabActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Grocery.Transparent" />
+
         <receiver
             android:name=".widget.ListWidgetReceiver"
             android:exported="true"
