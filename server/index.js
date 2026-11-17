@@ -95,7 +95,7 @@ app.use((req, _res, next) => {
   next();
 });
 
-app.get('/', (_req, res) => res.send('Grocery widget server OK'));
+app.get('/', (_req, res) => res.send('Grocery widget server OK · v2 (комментарии)'));
 
 // Railway стоит за прокси: реальный IP клиента — в X-Forwarded-For.
 app.set('trust proxy', true);
