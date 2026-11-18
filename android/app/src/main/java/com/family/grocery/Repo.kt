@@ -32,6 +32,16 @@ object Repo {
     val widgetSettings = MutableStateFlow(WidgetSettings())
     val selectedTab = MutableStateFlow(TAB_ALL)
 
+    /** Оформление приложения: цветовая тема (см. ui/Theme.kt) и режим system | light | dark | black. */
+    val appTheme = MutableStateFlow("system")
+    val appMode = MutableStateFlow("system")
+
+    fun setAppLook(theme: String = appTheme.value, mode: String = appMode.value) {
+        appTheme.value = theme
+        appMode.value = mode
+        prefs.edit().putString("appTheme", theme).putString("appMode", mode).apply()
+    }
+
     @Synchronized
     fun init(context: Context) {
         if (initialized) return
@@ -47,6 +57,8 @@ object Repo {
         onlyNeeded.value = prefs.getBoolean("onlyNeeded", false)
         widgetSettings.value = WidgetSettings.fromJson(prefs.getString("widgetSettings", null))
         selectedTab.value = prefs.getInt("selectedTab", TAB_ALL)
+        appTheme.value = prefs.getString("appTheme", "system") ?: "system"
+        appMode.value = prefs.getString("appMode", "system") ?: "system"
         initialized = true
         publish()
     }
@@ -128,7 +140,8 @@ object Repo {
     fun disconnect() {
         val only = onlyNeeded.value
         val ws = widgetSettings.value.toJson()
-        prefs.edit().clear().putBoolean("onlyNeeded", only).putString("widgetSettings", ws).apply()
+        prefs.edit().clear().putBoolean("onlyNeeded", only).putString("widgetSettings", ws)
+            .putString("appTheme", appTheme.value).putString("appMode", appMode.value).apply()
         synchronized(this) { pending.clear() }
         cacheFile.delete()
         serverState = ListState.EMPTY

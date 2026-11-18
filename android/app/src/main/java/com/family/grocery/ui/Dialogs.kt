@@ -49,19 +49,6 @@ import com.family.grocery.Repo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@Composable
-fun AppTheme(content: @Composable () -> Unit) {
-    val ctx = LocalContext.current
-    val dark = isSystemInDarkTheme()
-    val scheme = when {
-        Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(ctx)
-        Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(ctx)
-        dark -> darkColorScheme()
-        else -> lightColorScheme()
-    }
-    MaterialTheme(colorScheme = scheme, content = content)
-}
-
 private fun friendly(e: Exception): String =
     e.message?.takeIf { it.isNotBlank() && !it.contains("Exception") }
         ?: "Нет связи с сервером"
