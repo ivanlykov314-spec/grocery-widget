@@ -31,6 +31,7 @@ import com.family.grocery.WidgetSettings
 import com.family.grocery.ui.AddItemActivity
 import com.family.grocery.ui.MainActivity
 import com.family.grocery.ui.PickTabActivity
+import com.family.grocery.ui.SearchActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -190,11 +191,14 @@ object WidgetRenderer {
         rv.setViewPadding(R.id.content, pad, pad / 2 + 2, pad, pad / 2 + 2)
 
         // Заголовок
-        rv.setViewVisibility(R.id.title, if (ws.showTitle) View.VISIBLE else View.INVISIBLE)
+        rv.setViewVisibility(R.id.title, if (ws.showTitle) View.VISIBLE else View.GONE)
         rv.setTextViewText(R.id.title, "Покупки")
         rv.setTextColor(R.id.title, p.text)
         rv.setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, (ws.textSize + 2).toFloat())
         rv.setOnClickPendingIntent(R.id.title, activity(ctx, MainActivity::class.java, 10))
+        rv.setViewVisibility(R.id.btn_search, if (configured) View.VISIBLE else View.GONE)
+        rv.setInt(R.id.btn_search, "setColorFilter", p.text)
+        rv.setOnClickPendingIntent(R.id.btn_search, activity(ctx, SearchActivity::class.java, 13))
 
         // Кнопка «Купить» — только когда есть что купить; нажата = показываем только нужное.
         if (configured && s.neededCount > 0) {

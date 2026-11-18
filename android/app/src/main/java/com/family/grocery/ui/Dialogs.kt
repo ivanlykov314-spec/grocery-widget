@@ -158,12 +158,12 @@ private fun CategoryPicker(
 
 /** Окно добавления: можно добавлять товары подряд, не закрывая его. */
 @Composable
-fun AddItemDialog(onDismiss: () -> Unit) {
+fun AddItemDialog(onDismiss: () -> Unit, initialName: String = "") {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by Repo.state.collectAsState()
 
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
     var catId by remember {
         // Если открыта вкладка категории — новый товар сразу попадёт в неё.
         val tab = Repo.selectedTab.value

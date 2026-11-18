@@ -28,14 +28,28 @@
 
             <TextView
                 android:id="@+id/title"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:singleLine="true"
                 android:text="Покупки"
                 android:textColor="#FF1B1B1F"
                 android:textSize="18sp"
                 android:textStyle="bold" />
+
+            <!-- Поиск: открывает окно поверх рабочего стола (вводить текст в самом виджете Android не даёт) -->
+            <ImageView
+                android:id="@+id/btn_search"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="2dp"
+                android:contentDescription="Поиск"
+                android:padding="8dp"
+                android:src="@drawable/ic_search" />
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
 
             <!-- Кнопка «Купить»: три варианта оформления (рамка / заливка светлая / тёмная),
                  показывается один. Фон задан в макете — так он надёжно рисуется на любом лаунчере. -->

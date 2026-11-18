@@ -30,6 +30,15 @@
             android:theme="@style/Theme.Grocery.Transparent"
             android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
 
+        <!-- Поиск товара (лупа на виджете) -->
+        <activity
+            android:name=".ui.SearchActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Grocery.Transparent"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
+
         <!-- Комментарий к товару (нажатие на название в виджете) -->
         <activity
             android:name=".ui.NoteActivity"
